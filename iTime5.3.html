@@ -1,0 +1,1070 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <!--
+      =========================================
+      开发更新日志 (Version Log)
+      =========================================
+      [v5.2] iTime大宙司 5.2
+      - 升级：日视图时段矩阵双行展示，显示时间与最多10个字符的规划摘要。
+      - 调整：统一底部操作按钮命名（导出PNG、导出JS、导入JS）。
+      - 升级：全系统应用文件导出统一命名规范（iTM+版本号+YYMMDD+01.后缀）。
+
+      [v5.3] iTime大宙司 5.3
+      - 升级：增加「格式刷」复制功能。在日视图热力图中开启后，可快速将某一时段的（颜色+文本）批量粘贴到其他时段，极大提升规划效率。
+
+      [v5.1] iTime大宙司 5.1
+      - 升级：时段规划热力图的区块显示由 T编号(T01) 改为直观的起始时间(00:00)。
+      - 升级：重构 CSV 导出引擎，支持全息穿透导出，任意层级点击导出均整合年度至时段的所有数据为全景宽表。
+
+      [v5.0] iTime大宙司 5.0
+      - 升级：增加时段视图（日视图子层级），将一天按半小时划分为48个时段（T01~T48）。
+      - 升级：时段规划支持五色标签（灰/蓝/橙/紫/草绿），点击颜色自动补齐事项前缀（Sl-/Rt-/Rd-/Pj-/Rl-）。
+      - 升级：日视图新增 4x12 全局时段颜色矩阵，直观预览全天规划结构。
+      - 调整：精简日视图层级，直达热力图；内置全天默认作息模板（睡眠/休闲预制）。
+
+      [v4.0] iTime大宙司 4.0
+      - 升级：首创“结构化降维导出”引擎，支持导出思维导图(.opml)和数据表格(.csv)。
+      - 调整：全面移除原生浏览器 alert()，替换为沉浸式的全局 Toast 消息悬浮窗。
+
+      [v3.0] iTime大宙司 3.0
+      - 升级：重构右侧面板逻辑，实现“层级智能绑定”。
+      - 升级：首创【日历/规划】双模切换引擎。
+      - 调整：优化全层级穿透交互。
+
+      [v2.2] iTime大宙司 2.2
+      - 调整：修正周次计算逻辑为“周日为周首日”。
+      - 升级：重构年视图UI，采用 Q1-Q4 的季度区块包裹月份。
+
+      [v2.1] iTime大宙司 2.1
+      - 升级：调整网页主容器尺寸，强制保持 16:9 宽屏比例。
+      - 升级：在月视图中，每行的最左侧增加周次序号显示。
+
+      [v2.0] iTime大宙司 2.0
+      - 升级：增加五级视图切换，支持自定义命名，支持导出高清长图。
+      
+      [v1.0] iTime大宙司 1.0
+      - 基础日历渲染与本地数据互联。
+      =========================================
+    -->
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>iTime大宙司5.3</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+    </style>
+</head>
+<body class="bg-slate-100 h-screen w-screen overflow-hidden flex items-center justify-center p-2 md:p-4">
+    <div id="root" class="w-full h-full flex items-center justify-center"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        const CalendarIcon = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/></svg>);
+        const ChevronLeft = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="m15 18-6-6 6-6"/></svg>);
+        const ChevronRight = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="m9 18 6-6-6-6"/></svg>);
+        const Save = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7"/><path d="M7 3v4a1 1 0 0 0 1 1h7"/></svg>);
+        const Info = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>);
+        const Download = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>);
+        const Upload = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>);
+        const EditIcon = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>);
+        const ImageIcon = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>);
+        const LayoutGrid = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg>);
+        const ListTodo = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect x="3" y="5" width="6" height="6" rx="1"/><path d="m3 17 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></svg>);
+        const MindMapIcon = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect width="8" height="6" x="8" y="3" rx="1"/><path d="M12 9v2"/><path d="M5 15h14"/><path d="M5 15v2"/><path d="M19 15v2"/><rect width="8" height="6" x="1" y="17" rx="1"/><rect width="8" height="6" x="15" y="17" rx="1"/></svg>);
+        const TableIcon = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M3 3v18h18V3H3z"/><path d="M3 9h18"/><path d="M3 15h18"/><path d="M9 3v18"/><path d="M15 3v18"/></svg>);
+        const ClockIcon = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>);
+        const PaintbrushIcon = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="m9.06 11.9 8.07-8.06a2.85 2.85 0 1 1 4.03 4.03l-8.06 8.08"/><path d="M7.07 14.94c-1.66 0-3 1.35-3 3.02 0 1.33-2.5 1.52-2 2.02 1.08 1.1 2.49 2.02 4 2.02 2.2 0 4-1.8 4-4.04a3.01 3.01 0 0 0-3-3.02z"/></svg>);
+
+        const App = () => {
+          const [currentView, setCurrentView] = useState('month'); 
+          const [displayMode, setDisplayMode] = useState('calendar'); // 'calendar' | 'plan'
+          const [currentDate, setCurrentDate] = useState(new Date());
+          const [selectedDate, setSelectedDate] = useState(new Date()); 
+          const [selectedSlot, setSelectedSlot] = useState('T01'); // 新增：选中的时段 T01-T48
+          
+          const [notes, setNotes] = useState(() => {
+            const saved = localStorage.getItem('calendar_notes');
+            return saved ? JSON.parse(saved) : {};
+          });
+          
+          const [periodNames, setPeriodNames] = useState(() => {
+            const saved = localStorage.getItem('calendar_period_names');
+            return saved ? JSON.parse(saved) : {};
+          });
+
+          // 新增：时段颜色状态映射
+          const [slotColors, setSlotColors] = useState(() => {
+            const saved = localStorage.getItem('calendar_slot_colors');
+            return saved ? JSON.parse(saved) : {};
+          });
+
+          const [currentNoteText, setCurrentNoteText] = useState('');
+          const [currentSlotColor, setCurrentSlotColor] = useState('default');
+          
+          const [isEditingName, setIsEditingName] = useState(false);
+          const [editNameText, setEditNameText] = useState('');
+          const [toastMsg, setToastMsg] = useState(null);
+
+          // 5.3 新增：格式刷相关状态
+          const [isFormatPainterActive, setIsFormatPainterActive] = useState(false);
+          const [painterSourceSlot, setPainterSourceSlot] = useState(null); // 记录被复制的时段ID
+          
+          const fileInputRef = useRef(null);
+          const captureRef = useRef(null); 
+
+          const weekDays = ['日', '一', '二', '三', '四', '五', '六'];
+          // 增加了“时段”视图
+          const viewOptions = [
+            { id: 'year', label: '年' },
+            { id: 'quarter', label: '季' },
+            { id: 'month', label: '月' },
+            { id: 'week', label: '周' },
+            { id: 'day', label: '日' },
+            { id: 'slot', label: '时段' }
+          ];
+
+          // 5.0：定义5种颜色及其对应的前缀和样式
+          const colorOptions = [
+            { id: 'gray', label: '灰色', bg: 'bg-slate-400', ring: 'ring-slate-400', prefix: 'Sl-' },
+            { id: 'blue', label: '蓝色', bg: 'bg-blue-400', ring: 'ring-blue-400', prefix: 'Rt-' },
+            { id: 'orange', label: '橙色', bg: 'bg-orange-400', ring: 'ring-orange-400', prefix: 'Rd-' },
+            { id: 'purple', label: '紫色', bg: 'bg-purple-400', ring: 'ring-purple-400', prefix: 'Pj-' },
+            { id: 'green', label: '草绿', bg: 'bg-emerald-400', ring: 'ring-emerald-400', prefix: 'Rl-' },
+          ];
+
+          const formatDateKey = (date) => {
+            if (!date) return '';
+            const y = date.getFullYear();
+            const m = String(date.getMonth() + 1).padStart(2, '0');
+            const d = String(date.getDate()).padStart(2, '0');
+            return `${y}-${m}-${d}`;
+          };
+
+          const formatDisplayDate = (date) => {
+            if (!date) return '';
+            const y = date.getFullYear();
+            const m = date.getMonth() + 1;
+            const d = date.getDate();
+            const w = weekDays[date.getDay()];
+            return `${y}年${m}月${d}日 星期${w}`;
+          };
+
+          const getDaysInMonth = (year, month) => new Date(year, month + 1, 0).getDate();
+          const getFirstDayOfMonth = (year, month) => new Date(year, month, 1).getDay();
+
+          // 5.2/5.3 统一文件命名规范生成器
+          const getExportFileName = (ext) => {
+            const date = new Date();
+            const yy = String(date.getFullYear()).slice(-2);
+            const mm = String(date.getMonth() + 1).padStart(2, '0');
+            const dd = String(date.getDate()).padStart(2, '0');
+            return `iTM5.3-${yy}${mm}${dd}01.${ext}`;
+          };
+
+          const getWeekNumber = (d) => {
+            const date = new Date(d);
+            date.setHours(0, 0, 0, 0);
+            const startOfYear = new Date(date.getFullYear(), 0, 1);
+            const pastDaysOfYear = (date - startOfYear) / 86400000;
+            return Math.ceil((pastDaysOfYear + startOfYear.getDay() + 1) / 7);
+          };
+
+          // 5.0 新增：通过T01~T48获取时间段字符串
+          const getSlotTimeString = (slotId) => {
+            const idx = parseInt(slotId.replace('T', ''), 10) - 1;
+            const h1 = Math.floor(idx / 2);
+            const m1 = idx % 2 === 0 ? '00' : '30';
+            const h2 = Math.floor((idx + 1) / 2);
+            const m2 = (idx + 1) % 2 === 0 ? '00' : '30';
+            return `${String(h1).padStart(2,'0')}:${m1}-${String(h2).padStart(2,'0')}:${m2}`;
+          };
+
+          // 5.0 调整：默认作息时段配置
+          const getDefaultSlotData = (slotId) => {
+            const num = parseInt(slotId.replace('T', ''), 10);
+            if ((num >= 1 && num <= 13) || num === 47 || num === 48) return { color: 'gray', note: 'Sl- 深度睡眠' };
+            if (num === 26) return { color: 'gray', note: 'Sl- 浅度睡眠' };
+            if ((num >= 14 && num <= 16) || num === 25 || (num >= 35 && num <= 46)) return { color: 'green', note: 'Rl-休闲' };
+            return { color: 'default', note: '' };
+          };
+
+          const getActivePeriodInfo = () => {
+            const y = currentDate.getFullYear();
+            const m = currentDate.getMonth();
+            
+            let key, title, prefix;
+            if (currentView === 'year') {
+              key = `${y}`; title = `${y}年`; prefix = '年度';
+            } else if (currentView === 'quarter') {
+              const q = Math.floor(m / 3) + 1;
+              key = `${y}-Q${q}`; title = `${y}年 第${q}季度`; prefix = '季度';
+            } else if (currentView === 'month') {
+              key = `${y}-${String(m + 1).padStart(2, '0')}`; title = `${y}年 ${m + 1}月`; prefix = '月度';
+            } else if (currentView === 'week') {
+              const w = getWeekNumber(currentDate);
+              key = `${y}-W${w}`; title = `${y}年 第${w}周`; prefix = '周度';
+            } else if (currentView === 'slot') {
+              key = `${formatDateKey(selectedDate)}-${selectedSlot}`; title = `${formatDisplayDate(selectedDate)} ${selectedSlot}`; prefix = '时段';
+            } else {
+              key = formatDateKey(selectedDate); title = formatDisplayDate(selectedDate); prefix = '当日';
+            }
+            return { key, title, prefix };
+          };
+
+          const activeInfo = getActivePeriodInfo();
+
+          const showToast = (msg) => {
+            setToastMsg(msg);
+            setTimeout(() => setToastMsg(null), 3000);
+          };
+
+          useEffect(() => {
+            if (currentView === 'slot') {
+                const defaults = getDefaultSlotData(selectedSlot);
+                setCurrentNoteText(notes[activeInfo.key] !== undefined ? notes[activeInfo.key] : defaults.note);
+                setCurrentSlotColor(slotColors[activeInfo.key] !== undefined ? slotColors[activeInfo.key] : defaults.color);
+            } else {
+                setCurrentNoteText(notes[activeInfo.key] || '');
+            }
+          }, [activeInfo.key, notes, slotColors, currentView, selectedSlot]);
+
+          useEffect(() => {
+            localStorage.setItem('calendar_notes', JSON.stringify(notes));
+          }, [notes]);
+
+          useEffect(() => {
+            localStorage.setItem('calendar_period_names', JSON.stringify(periodNames));
+          }, [periodNames]);
+
+          useEffect(() => {
+            localStorage.setItem('calendar_slot_colors', JSON.stringify(slotColors));
+          }, [slotColors]);
+
+          const handlePrevPeriod = () => {
+            if (currentView === 'slot') {
+                setIsFormatPainterActive(false); // 离开视图时关闭刷子
+                let num = parseInt(selectedSlot.slice(1), 10);
+                if (num > 1) {
+                    setSelectedSlot(`T${String(num-1).padStart(2,'0')}`);
+                } else {
+                    const newDate = new Date(selectedDate);
+                    newDate.setDate(newDate.getDate() - 1);
+                    setCurrentDate(newDate);
+                    setSelectedDate(newDate);
+                    setSelectedSlot('T48');
+                }
+                return;
+            }
+            setIsFormatPainterActive(false); // 离开视图时关闭刷子
+            const newDate = new Date(currentDate);
+            if (currentView === 'year') newDate.setFullYear(newDate.getFullYear() - 1);
+            if (currentView === 'quarter') newDate.setMonth(newDate.getMonth() - 3);
+            if (currentView === 'month') newDate.setMonth(newDate.getMonth() - 1);
+            if (currentView === 'week') newDate.setDate(newDate.getDate() - 7);
+            if (currentView === 'day') newDate.setDate(newDate.getDate() - 1);
+            setCurrentDate(newDate);
+            if(currentView === 'day') setSelectedDate(newDate);
+          };
+
+          const handleNextPeriod = () => {
+            if (currentView === 'slot') {
+                setIsFormatPainterActive(false); // 离开视图时关闭刷子
+                let num = parseInt(selectedSlot.slice(1), 10);
+                if (num < 48) {
+                    setSelectedSlot(`T${String(num+1).padStart(2,'0')}`);
+                } else {
+                    const newDate = new Date(selectedDate);
+                    newDate.setDate(newDate.getDate() + 1);
+                    setCurrentDate(newDate);
+                    setSelectedDate(newDate);
+                    setSelectedSlot('T01');
+                }
+                return;
+            }
+            setIsFormatPainterActive(false); // 离开视图时关闭刷子
+            const newDate = new Date(currentDate);
+            if (currentView === 'year') newDate.setFullYear(newDate.getFullYear() + 1);
+            if (currentView === 'quarter') newDate.setMonth(newDate.getMonth() + 3);
+            if (currentView === 'month') newDate.setMonth(newDate.getMonth() + 1);
+            if (currentView === 'week') newDate.setDate(newDate.getDate() + 7);
+            if (currentView === 'day') newDate.setDate(newDate.getDate() + 1);
+            setCurrentDate(newDate);
+            if(currentView === 'day') setSelectedDate(newDate);
+          };
+
+          const handleToday = () => {
+            const today = new Date();
+            setIsFormatPainterActive(false); // 离开视图时关闭刷子
+            setCurrentDate(today);
+            setSelectedDate(today);
+            setCurrentView('month'); 
+            setDisplayMode('calendar');
+          };
+
+          const handleSaveNote = () => {
+            setNotes(prev => ({ ...prev, [activeInfo.key]: currentNoteText }));
+            if (currentView === 'slot') {
+                setSlotColors(prev => ({ ...prev, [activeInfo.key]: currentSlotColor }));
+            }
+            showToast(`【${activeInfo.prefix}规划】保存成功！`);
+          };
+
+          const handleSavePeriodName = () => {
+            if (activeInfo.key) {
+              setPeriodNames(prev => ({ ...prev, [activeInfo.key]: editNameText }));
+            }
+            setIsEditingName(false);
+          };
+
+          // 5.0 新增：处理颜色点击和前缀注入
+          const handleColorSelect = (cId, prefix) => {
+            setCurrentSlotColor(cId);
+            let txt = currentNoteText || '';
+            const allPrefixes = colorOptions.map(c => c.prefix);
+            const prefixRegex = new RegExp(`^(${allPrefixes.join('|')})\\s*`);
+            
+            if (!txt.trim()) {
+                setCurrentNoteText(`${prefix} `);
+            } else if (prefixRegex.test(txt)) {
+                setCurrentNoteText(txt.replace(prefixRegex, `${prefix} `));
+            } else {
+                setCurrentNoteText(`${prefix} ${txt}`);
+            }
+          };
+
+          const createNode = (key, title, levelName, overrideNote) => ({
+             key, title, levelName,
+             name: periodNames[key] || '',
+             note: overrideNote !== undefined ? overrideNote : (notes[key] || ''),
+             children: []
+          });
+
+          // 5.0 升级：在日视图或时段视图导出时，将时段数据作为子节点纳入
+          const extractDataTree = () => {
+              const y = currentDate.getFullYear();
+              let root = createNode(`${y}`, `${y}年`, '年度'); // 5.1 升级：强行以当前年份为根节点，保证导出的是全息数据
+
+              // 构建当年的四个季度
+              for(let q=1; q<=4; q++) {
+                  const qNode = createNode(`${y}-Q${q}`, `Q${q} 第${q}季度`, '季度');
+                  
+                  // 构建该季度下的三个月
+                  for(let m=0; m<3; m++) {
+                      const monthIdx = (q-1)*3 + m;
+                      const mNode = createNode(`${y}-${String(monthIdx+1).padStart(2,'0')}`, `${monthIdx+1}月`, '月度');
+                      
+                      const daysInM = getDaysInMonth(y, monthIdx);
+                      let currentWNode = null;
+                      let currentWNum = -1;
+
+                      // 构建该月下的日子和时段
+                      for(let d=1; d<=daysInM; d++){
+                          const dObj = new Date(y, monthIdx, d);
+                          const wNum = getWeekNumber(dObj);
+                          
+                          // 如果进入了新的一周，创建周节点挂在月节点下
+                          if(wNum !== currentWNum) {
+                              currentWNum = wNum;
+                              currentWNode = createNode(`${y}-W${wNum}`, `W${wNum} 第${wNum}周`, '周度');
+                              mNode.children.push(currentWNode);
+                          }
+                          
+                          // 创建日节点挂在周节点下
+                          const dNode = createNode(formatDateKey(dObj), `${monthIdx+1}月${d}日`, '当日');
+                          currentWNode.children.push(dNode);
+
+                          // 构建该日下的48个时段（只导出有内容的）
+                          for(let i=1; i<=48; i++) {
+                              const sId = `T${String(i).padStart(2,'0')}`;
+                              const sKey = `${dNode.key}-${sId}`;
+                              const defaults = getDefaultSlotData(sId);
+                              const finalNote = notes[sKey] !== undefined ? notes[sKey] : defaults.note;
+                              
+                              // 只有当存在实质性规划内容时才导出该时段
+                              if (finalNote && finalNote.trim() !== '') {
+                                  dNode.children.push(createNode(sKey, `${sId} (${getSlotTimeString(sId)})`, '时段', finalNote));
+                              }
+                          }
+                      }
+                      qNode.children.push(mNode);
+                  }
+                  root.children.push(qNode);
+              }
+
+              return root;
+          };
+
+          const downloadFile = (content, filename, type) => {
+              const blob = new Blob([content], { type });
+              const url = URL.createObjectURL(blob);
+              const link = document.createElement('a');
+              link.href = url;
+              link.download = filename;
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+              URL.revokeObjectURL(url);
+          };
+
+          const handleExportCSV = () => {
+              const tree = extractDataTree();
+              const escapeCSV = (str) => `"${String(str || '').replace(/"/g, '""')}"`;
+              
+              // 5.1：调整了 CSV 的横向宽表结构，更加利于在 Excel 中进行数据透视分析
+              const flattenWideTable = (node, path = {}, result = []) => {
+                  path[node.levelName] = { title: node.title, name: node.name || '', note: node.note || '' };
+                  
+                  // 如果是叶子节点（即该层级没有更深的数据了）
+                  if (node.children.length === 0) {
+                      // 确保有内容的才输出，避免导出大量没有写过规划的空层级
+                      const hasContent = Object.values(path).some(p => p.name !== '' || p.note !== '');
+                      if(hasContent) {
+                         result.push({ ...path });
+                      }
+                  } else {
+                      node.children.forEach(c => flattenWideTable(c, { ...path }, result));
+                  }
+                  return result;
+              };
+              
+              const rawRows = flattenWideTable(tree);
+              
+              let csvContent = '\uFEFF'; 
+              // 宽表表头
+              const headers = ['年度','季度','月度','周度','当日','时段'];
+              csvContent += headers.map(h => `${h}节点,${h}命名,${h}规划`).join(',') + '\n';
+              
+              rawRows.forEach(row => {
+                  const csvRow = headers.map(h => {
+                      const data = row[h] || { title:'', name:'', note:'' };
+                      return `${escapeCSV(data.title)},${escapeCSV(data.name)},${escapeCSV(data.note)}`;
+                  });
+                  csvContent += csvRow.join(',') + '\n';
+              });
+              
+              downloadFile(csvContent, getExportFileName('csv'), 'text/csv;charset=utf-8;');
+              showToast("全息数据表格(.csv)导出成功！");
+          };
+
+          const handleExportMindMap = () => {
+              const tree = extractDataTree();
+              const escapeXML = (unsafe) => (unsafe || '').replace(/[<>&'"]/g, c => {
+                  switch (c) { case '<': return '&lt;'; case '>': return '&gt;'; case '&': return '&amp;'; case '\'': return '&apos;'; case '"': return '&quot;'; default: return c; }
+              });
+
+              const buildOPMLNode = (node) => {
+                  let displayTitle = node.title;
+                  if (node.name) displayTitle += `【${node.name}】`;
+                  let xml = `\n<outline text="${escapeXML(displayTitle)}" _note="${escapeXML(node.note)}">`;
+                  if(node.note) xml += `\n  <outline text="${escapeXML('📝 ' + node.note.replace(/\n/g, ' '))}" />`; 
+                  node.children.forEach(c => { xml += buildOPMLNode(c); });
+                  xml += `\n</outline>`;
+                  return xml;
+              };
+
+              const opmlContent = `<?xml version="1.0" encoding="UTF-8"?>\n<opml version="1.0">\n  <head>\n    <title>iTime大宙司 - 规划导图 (${tree.title})</title>\n  </head>\n  <body>${buildOPMLNode(tree)}\n  </body>\n</opml>`;
+              downloadFile(opmlContent, getExportFileName('opml'), 'text/xml;charset=utf-8;');
+              showToast("思维导图(.opml)导出成功！");
+          };
+
+          const handleExportData = () => {
+              const exportObj = { notes, periodNames, slotColors };
+              const dataStr = JSON.stringify(exportObj, null, 2);
+              downloadFile(dataStr, getExportFileName('json'), 'application/json');
+              showToast("数据备份文件导出成功！");
+          };
+
+          const handleImportData = (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (event) => {
+              try {
+                const importedData = JSON.parse(event.target.result);
+                if (importedData.notes) setNotes(importedData.notes);
+                if (importedData.periodNames) setPeriodNames(importedData.periodNames); 
+                if (importedData.slotColors) setSlotColors(importedData.slotColors);
+                showToast('iTime大宙司：数据恢复成功！');
+              } catch (error) { showToast('导入失败：文件格式错误。'); }
+              if (fileInputRef.current) fileInputRef.current.value = '';
+            };
+            reader.readAsText(file);
+          };
+
+          const handleExportImage = () => {
+            if (!captureRef.current) return;
+            showToast("正在生成高清长图，请稍候...");
+            html2canvas(captureRef.current, { scale: 2, useCORS: true, backgroundColor: '#f8fafc' }).then(canvas => {
+              let link = document.createElement('a');
+              link.download = getExportFileName('PNG');
+              link.href = canvas.toDataURL('image/png');
+              link.click();
+              showToast("长图已保存！");
+            });
+          };
+
+          // (复用 V4.0 的规划视图与日历视图逻辑，略加优化)
+          const renderYearPlanView = () => {
+            const year = currentDate.getFullYear();
+            const cards = [];
+            for (let q = 1; q <= 4; q++) {
+               const k = `${year}-Q${q}`;
+               const name = periodNames[k] ? `【${periodNames[k]}】` : '';
+               const text = notes[k] || '';
+               cards.push(
+                 <div key={q} onClick={() => { setCurrentDate(new Date(year, (q-1)*3, 1)); setCurrentView('quarter'); }} 
+                      className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col cursor-pointer hover:border-blue-300 hover:shadow-md transition-all group">
+                    <h4 className="font-extrabold text-blue-600 mb-3 flex items-center justify-between">
+                       <span>Q{q} 第{q}季度 <span className="text-slate-500 font-normal text-sm">{name}</span></span>
+                       <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-blue-500" />
+                    </h4>
+                    <div className="text-sm text-slate-600 whitespace-pre-wrap flex-grow bg-slate-50 p-3 rounded-xl border border-slate-100">
+                       {text ? text : <span className="opacity-40 italic flex items-center gap-1"><EditIcon className="w-3 h-3"/> 点击撰写季度规划...</span>}
+                    </div>
+                 </div>
+               );
+            }
+            return <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 h-full overflow-y-auto no-scrollbar pb-4">{cards}</div>;
+          };
+
+          const renderQuarterPlanView = () => {
+            const year = currentDate.getFullYear();
+            const currentQ = Math.floor(currentDate.getMonth() / 3);
+            const cards = [];
+            for(let i=0; i<3; i++) {
+               const monthIndex = currentQ * 3 + i;
+               const k = `${year}-${String(monthIndex+1).padStart(2,'0')}`;
+               const name = periodNames[k] ? `【${periodNames[k]}】` : '';
+               const text = notes[k] || '';
+               cards.push(
+                 <div key={i} onClick={() => { setCurrentDate(new Date(year, monthIndex, 1)); setCurrentView('month'); }} 
+                      className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col cursor-pointer hover:border-blue-300 hover:shadow-md transition-all group">
+                    <h4 className="font-extrabold text-blue-600 mb-3 flex items-center justify-between">
+                       <span>{monthIndex+1}月 <span className="text-slate-500 font-normal text-sm">{name}</span></span>
+                       <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-blue-500" />
+                    </h4>
+                    <div className="text-sm text-slate-600 whitespace-pre-wrap flex-grow bg-slate-50 p-3 rounded-xl border border-slate-100">
+                       {text ? text : <span className="opacity-40 italic flex items-center gap-1"><EditIcon className="w-3 h-3"/> 点击撰写月度规划...</span>}
+                    </div>
+                 </div>
+               );
+            }
+            return <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 h-full overflow-y-auto no-scrollbar pb-4">{cards}</div>;
+          };
+
+          const renderMonthPlanView = () => {
+            const year = currentDate.getFullYear();
+            const month = currentDate.getMonth();
+            const daysInMonth = getDaysInMonth(year, month);
+            const weekSet = new Set();
+            const weekData = [];
+            for(let d=1; d<=daysInMonth; d++) {
+               const date = new Date(year, month, d);
+               const wNum = getWeekNumber(date);
+               if(!weekSet.has(wNum)) { weekSet.add(wNum); weekData.push({ wNum, date }); }
+            }
+            const cards = weekData.map(({wNum, date}, idx) => {
+               const k = `${year}-W${wNum}`;
+               const name = periodNames[k] ? `【${periodNames[k]}】` : '';
+               const text = notes[k] || '';
+               return (
+                 <div key={idx} onClick={() => { setCurrentDate(date); setCurrentView('week'); }} 
+                      className="bg-white p-4 md:p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col cursor-pointer hover:border-blue-300 hover:shadow-md transition-all group">
+                    <h4 className="font-extrabold text-blue-600 mb-3 flex items-center justify-between">
+                       <span>W{wNum} 第{wNum}周 <span className="text-slate-500 font-normal text-sm">{name}</span></span>
+                       <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-blue-500" />
+                    </h4>
+                    <div className="text-sm text-slate-600 whitespace-pre-wrap flex-grow bg-slate-50 p-3 rounded-xl border border-slate-100 min-h-[80px]">
+                       {text ? text : <span className="opacity-40 italic flex items-center gap-1"><EditIcon className="w-3 h-3"/> 点击撰写周度规划...</span>}
+                    </div>
+                 </div>
+               );
+            });
+            return <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 h-full overflow-y-auto no-scrollbar pb-4">{cards}</div>;
+          };
+
+          const renderWeekPlanView = () => {
+            const days = [];
+            const startDate = new Date(currentDate);
+            startDate.setDate(startDate.getDate() - startDate.getDay());
+
+            for (let i = 0; i < 7; i++) {
+              const currentDayDate = new Date(startDate);
+              currentDayDate.setDate(startDate.getDate() + i);
+              const k = formatDateKey(currentDayDate);
+              const text = notes[k] || '';
+              const dayName = weekDays[i];
+              days.push(
+                <div key={i} onClick={() => { setCurrentDate(currentDayDate); setSelectedDate(currentDayDate); setCurrentView('day'); }} 
+                     className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col cursor-pointer hover:border-blue-300 hover:shadow-md transition-all group min-h-[120px]">
+                   <h4 className="font-extrabold text-slate-700 mb-2 flex items-center justify-between border-b border-slate-100 pb-2">
+                      <span>{currentDayDate.getMonth()+1}月{currentDayDate.getDate()}日</span>
+                      <span className="text-blue-500">周{dayName}</span>
+                   </h4>
+                   <div className="text-sm text-slate-600 whitespace-pre-wrap flex-grow pt-1">
+                      {text ? text : <span className="opacity-40 italic flex items-center gap-1"><EditIcon className="w-3 h-3"/> 点击进入当日规划...</span>}
+                   </div>
+                </div>
+              );
+            }
+            return <div className="grid grid-cols-2 md:grid-cols-4 gap-4 h-full overflow-y-auto no-scrollbar pb-4">{days}</div>;
+          };
+
+          const renderMiniCalendar = (year, month) => {
+            const daysInMonth = getDaysInMonth(year, month);
+            const firstDay = getFirstDayOfMonth(year, month);
+            const monthKey = `${year}-${String(month + 1).padStart(2, '0')}`;
+            const customName = periodNames[monthKey];
+            const days = [];
+            
+            for (let i = 0; i < firstDay; i++) { days.push(<div key={`e-${i}`}></div>); }
+            for (let d = 1; d <= daysInMonth; d++) {
+              const dateKey = formatDateKey(new Date(year, month, d));
+              const hasNote = notes[dateKey] && notes[dateKey].trim() !== '';
+              const isSelected = dateKey === formatDateKey(selectedDate);
+              const isToday = dateKey === formatDateKey(new Date());
+
+              days.push(
+                <div key={d} onClick={() => { setCurrentDate(new Date(year, month, d)); setSelectedDate(new Date(year, month, d)); setCurrentView('day'); }}
+                  className={`relative flex items-center justify-center aspect-square rounded cursor-pointer text-[10px] sm:text-xs transition-colors
+                    ${isSelected ? 'bg-blue-600 text-white' : 'hover:bg-blue-50 text-slate-600'}
+                    ${isToday && !isSelected ? 'text-blue-600 font-bold' : ''} `} >
+                  {d}
+                  {hasNote && <span className={`absolute bottom-0.5 w-1 h-1 rounded-full ${isSelected ? 'bg-white' : 'bg-blue-400'}`}></span>}
+                </div>
+              );
+            }
+
+            return (
+              <div key={month} className="bg-white p-2 rounded-xl border border-slate-100 shadow-sm flex flex-col h-full group">
+                <div className="font-bold text-slate-700 text-center mb-1 text-xs md:text-sm cursor-pointer group-hover:text-blue-600 flex justify-center items-center flex-wrap transition-colors"
+                  onClick={(e) => { e.stopPropagation(); setCurrentDate(new Date(year, month, 1)); setCurrentView('month'); }} title="点击进入月视图" >
+                  {month + 1}月 {customName && <span className="text-blue-500 text-[10px] ml-0.5 font-normal">【{customName}】</span>}
+                </div>
+                <div className="grid grid-cols-7 gap-1 text-center text-[8px] sm:text-[10px] text-slate-400 mb-1">
+                  {weekDays.map(d => <div key={d}>{d}</div>)}
+                </div>
+                <div className="grid grid-cols-7 gap-1 flex-grow">{days}</div>
+              </div>
+            );
+          };
+
+          const renderYearView = () => {
+            const year = currentDate.getFullYear();
+            const quarters = [];
+            for (let q = 0; q < 4; q++) {
+              const quarterKey = `${year}-Q${q + 1}`;
+              const qName = periodNames[quarterKey];
+              const months = [];
+              for (let m = 0; m < 3; m++) { months.push(renderMiniCalendar(year, q * 3 + m)); }
+              quarters.push(
+                <div key={q} className="bg-slate-50/50 p-2 md:p-3 rounded-2xl border border-slate-200 shadow-sm flex flex-col gap-2 relative">
+                  <div className="font-extrabold text-slate-800 text-sm md:text-base cursor-pointer hover:text-blue-600 flex items-center justify-between border-b border-slate-200 pb-2 transition-colors group"
+                       onClick={() => { setCurrentDate(new Date(year, q * 3, 1)); setCurrentView('quarter'); }} title={`点击进入 第${q + 1}季度`}>
+                    <div className="flex items-center flex-wrap">
+                      <div className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-[10px] md:text-xs mr-2 font-black shadow-sm">Q{q + 1}</div>
+                      <span>第 {q + 1} 季度</span>
+                      {qName && <span className="text-blue-600 text-xs ml-1 font-normal">【{qName}】</span>}
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-blue-500 transition-colors" />
+                  </div>
+                  <div className="grid grid-cols-3 gap-1.5 md:gap-2 flex-grow">{months}</div>
+                </div>
+              );
+            }
+            return <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4 h-full overflow-y-auto no-scrollbar pb-4 pr-1">{quarters}</div>;
+          };
+
+          const renderQuarterView = () => {
+            const year = currentDate.getFullYear();
+            const currentQ = Math.floor(currentDate.getMonth() / 3);
+            const months = [];
+            for (let i = currentQ * 3; i < currentQ * 3 + 3; i++) {
+              months.push(renderMiniCalendar(year, i));
+            }
+            return <div className="flex flex-col gap-4 h-full"><div className="grid grid-cols-3 gap-2 md:gap-4 flex-grow">{months}</div></div>;
+          };
+
+          const renderMonthView = () => {
+            const year = currentDate.getFullYear();
+            const month = currentDate.getMonth();
+            const daysInMonth = getDaysInMonth(year, month);
+            const firstDay = getFirstDayOfMonth(year, month);
+            const gridRows = [];
+            let currentRow = [];
+            for (let i = 0; i < firstDay; i++) { currentRow.push(null); }
+            for (let d = 1; d <= daysInMonth; d++) {
+                currentRow.push(new Date(year, month, d));
+                if (currentRow.length === 7) { gridRows.push(currentRow); currentRow = []; }
+            }
+            if (currentRow.length > 0) {
+                while (currentRow.length < 7) { currentRow.push(null); }
+                gridRows.push(currentRow);
+            }
+            return (
+              <div className="flex flex-col h-full">
+                <div className="grid grid-cols-[auto_repeat(7,1fr)] gap-1 md:gap-2 mb-2 text-center text-xs md:text-sm">
+                  <div className="w-8 md:w-10"></div> 
+                  {weekDays.map((day, idx) => ( <div key={day} className={`font-semibold pb-1 ${idx === 0 || idx === 6 ? 'text-red-400' : 'text-slate-400'}`}>{day}</div> ))}
+                </div>
+                <div className="flex-grow flex flex-col gap-1 md:gap-2 overflow-y-auto no-scrollbar pb-4">
+                  {gridRows.map((row, rowIndex) => {
+                    const firstValidDateInRow = row.find(date => date !== null);
+                    const weekNum = firstValidDateInRow ? getWeekNumber(firstValidDateInRow) : '';
+                    return (
+                      <div key={rowIndex} className="grid grid-cols-[auto_repeat(7,1fr)] gap-1 md:gap-2 flex-1 min-h-[3rem]">
+                        <div onClick={() => { if(firstValidDateInRow) { setCurrentDate(firstValidDateInRow); setCurrentView('week'); } }}
+                             className="flex flex-col items-center justify-center w-8 md:w-10 bg-blue-50 hover:bg-blue-100 cursor-pointer rounded-lg md:rounded-xl border border-blue-100 transition-all group shadow-sm" title="点击查看此周排期">
+                           <span className="text-[10px] md:text-xs font-bold text-blue-500 group-hover:scale-110 transition-transform">W{weekNum}</span>
+                           <ChevronRight className="w-3 h-3 text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity mt-0.5" />
+                        </div>
+                        {row.map((currentDayDate, cellIndex) => {
+                          if (!currentDayDate) return <div key={`empty-${rowIndex}-${cellIndex}`} className="rounded-lg md:rounded-xl border border-transparent"></div>;
+                          const dateKey = formatDateKey(currentDayDate);
+                          const isToday = dateKey === formatDateKey(new Date());
+                          const isSelected = dateKey === formatDateKey(selectedDate);
+                          const hasNote = notes[dateKey] && notes[dateKey].trim() !== '';
+                          return (
+                            <div key={dateKey} onClick={() => { setCurrentDate(currentDayDate); setSelectedDate(currentDayDate); setCurrentView('day'); }}
+                                 className={`relative flex flex-col items-center justify-center rounded-lg md:rounded-xl cursor-pointer transition-all duration-200 ease-in-out border
+                                ${isSelected ? 'bg-blue-600 text-white shadow-md border-blue-600 scale-[1.02]' : 'bg-white hover:bg-blue-50 text-slate-700 border-slate-100 hover:border-blue-200 shadow-sm'}
+                                ${isToday && !isSelected ? 'ring-2 ring-blue-400 font-bold' : ''} `}>
+                              <span className="text-sm md:text-base">{currentDayDate.getDate()}</span>
+                              {hasNote && <span className={`absolute bottom-1 w-1 h-1 md:w-1.5 md:h-1.5 rounded-full ${isSelected ? 'bg-white' : 'bg-blue-500'}`}></span>}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          };
+
+          const renderWeekView = () => {
+            const days = [];
+            const startDate = new Date(currentDate);
+            startDate.setDate(startDate.getDate() - startDate.getDay());
+            for (let i = 0; i < 7; i++) {
+              const currentDayDate = new Date(startDate);
+              currentDayDate.setDate(startDate.getDate() + i);
+              const dateKey = formatDateKey(currentDayDate);
+              const isToday = dateKey === formatDateKey(new Date());
+              const isSelected = dateKey === formatDateKey(selectedDate);
+              const noteText = notes[dateKey] || '';
+              days.push(
+                <div key={i} onClick={() => { setCurrentDate(currentDayDate); setSelectedDate(currentDayDate); setCurrentView('day'); }}
+                     className={`p-3 rounded-xl border transition-all cursor-pointer flex flex-col h-full shadow-sm
+                    ${isSelected ? 'bg-blue-600 text-white shadow-md border-blue-600' : 'bg-white border-slate-200 hover:border-blue-300'}
+                    ${isToday && !isSelected ? 'ring-2 ring-blue-400' : ''} `}>
+                  <div className={`font-bold text-sm md:text-base mb-1 flex justify-between items-center border-b pb-1 ${isSelected ? 'text-blue-100 border-blue-500' : 'text-slate-400 border-slate-100'}`}>
+                    <span>{weekDays[i]}</span>
+                    <span className={isSelected ? 'text-white font-black' : 'text-slate-700'}>{currentDayDate.getMonth()+1}/{currentDayDate.getDate()}</span>
+                  </div>
+                  <div className={`text-[10px] md:text-xs flex-grow overflow-hidden mt-1 whitespace-pre-wrap ${isSelected ? 'text-blue-50' : 'text-slate-600'}`}>
+                    {noteText ? noteText : <span className="opacity-40 italic">无安排</span>}
+                  </div>
+                </div>
+              );
+            }
+            return <div className="grid grid-cols-7 gap-2 h-full overflow-hidden pb-2">{days}</div>;
+          };
+
+          const renderDayView = () => {
+            const dateKey = formatDateKey(selectedDate);
+            
+            // 5.3 处理格式刷点击事件
+            const handleSlotClick = (sId) => {
+                if (isFormatPainterActive) {
+                    if (!painterSourceSlot) {
+                        // 步骤1：选中源时段
+                        setPainterSourceSlot(sId);
+                        showToast(`已复制时段 ${sId} 的规划，点击其他时段即可粘贴。`);
+                    } else {
+                        // 步骤2：粘贴到目标时段
+                        const srcKey = `${dateKey}-${painterSourceSlot}`;
+                        const targetKey = `${dateKey}-${sId}`;
+                        
+                        // 获取源数据 (包含默认值的回退)
+                        const srcDefaults = getDefaultSlotData(painterSourceSlot);
+                        const srcColor = slotColors[srcKey] !== undefined ? slotColors[srcKey] : srcDefaults.color;
+                        const srcNote = notes[srcKey] !== undefined ? notes[srcKey] : srcDefaults.note;
+                        
+                        // 写入目标数据
+                        setSlotColors(prev => ({ ...prev, [targetKey]: srcColor }));
+                        setNotes(prev => ({ ...prev, [targetKey]: srcNote }));
+                    }
+                } else {
+                    // 正常的点击进入编辑模式
+                    setSelectedSlot(sId); 
+                    setCurrentView('slot');
+                }
+            };
+            
+            // 构造48个时段的网格
+            const slotElements = [];
+            for (let i = 1; i <= 48; i++) {
+                const sId = `T${String(i).padStart(2,'0')}`;
+                const sKey = `${dateKey}-${sId}`;
+                const defaults = getDefaultSlotData(sId);
+                const colorId = slotColors[sKey] !== undefined ? slotColors[sKey] : defaults.color;
+                const noteText = notes[sKey] !== undefined ? notes[sKey] : defaults.note;
+                const hasNote = !!noteText;
+                
+                let bgClass = 'bg-slate-100 hover:bg-slate-200 border-slate-200 text-slate-500';
+                if (colorId !== 'default') {
+                    const colorObj = colorOptions.find(c => c.id === colorId);
+                    if (colorObj) bgClass = `${colorObj.bg} text-white border-transparent shadow-sm`;
+                } else if (hasNote) {
+                    bgClass = 'bg-slate-300 text-slate-700 border-transparent';
+                }
+
+                // 5.1 升级：将格子内的文本替换为该时段的起始时间 (例如 00:00)
+                const startTimeStr = getSlotTimeString(sId).split('-')[0];
+                
+                // 5.2 升级：截取前10个字符的规划文本用于展示
+                const displayNote = noteText ? noteText.replace(/\n/g, ' ').substring(0, 10) : '';
+
+                // 5.3 升级：如果当前是作为被复制的源，给予明显的描边提示
+                const isSourceSlot = isFormatPainterActive && painterSourceSlot === sId;
+                const sourceRingClass = isSourceSlot ? 'ring-4 ring-offset-2 ring-blue-500 z-10 scale-110 shadow-lg' : '';
+
+                slotElements.push(
+                    <div 
+                        key={sId} 
+                        onClick={(e) => { e.stopPropagation(); handleSlotClick(sId); }}
+                        className={`flex flex-col items-center justify-center rounded border transition-transform hover:scale-105 cursor-pointer overflow-hidden min-h-[36px] md:min-h-[48px] py-1 ${bgClass} ${sourceRingClass}`}
+                        title={`${sId} (${getSlotTimeString(sId)}) - ${isFormatPainterActive ? (painterSourceSlot ? '点击将内容粘贴到这里' : '点击作为复制源头') : '点击进入规划'}\n${noteText}`}
+                    >
+                        <span className="text-[10px] md:text-[12px] font-bold tracking-tighter leading-none">{startTimeStr}</span>
+                        <span className="text-[8px] md:text-[9px] font-normal truncate w-full px-0.5 text-center mt-1 opacity-90">{displayNote}</span>
+                    </div>
+                );
+            }
+
+            return (
+              <div className="flex flex-col h-full justify-center pb-4">
+                 {/* 4x12 时段预览矩阵 */}
+                 <div className="bg-white p-4 md:p-8 rounded-2xl border border-slate-100 shadow-sm w-full mt-2 md:mt-4 relative">
+                     
+                     {/* 5.3 格式刷操作栏 */}
+                     <div className="flex items-center justify-between mb-4 md:mb-6 border-b border-slate-100 pb-4">
+                         <div className="text-sm md:text-base font-bold text-slate-500 flex items-center gap-2">
+                             <LayoutGrid className="w-4 h-4 md:w-5 md:h-5"/> 时段规划热力图 (00:00 - 24:00)
+                         </div>
+                         <div className="flex items-center gap-3">
+                             {isFormatPainterActive && (
+                                <span className="text-xs font-semibold text-blue-500 animate-pulse flex items-center gap-1 bg-blue-50 px-2 py-1 rounded-full border border-blue-100">
+                                   <div className="w-1.5 h-1.5 rounded-full bg-blue-500"></div>
+                                   {painterSourceSlot ? '请点击目标时段进行粘贴' : '请点击源时段进行复制'}
+                                </span>
+                             )}
+                             <button 
+                                 onClick={() => {
+                                     setIsFormatPainterActive(!isFormatPainterActive);
+                                     setPainterSourceSlot(null); // 关闭时重置源
+                                 }}
+                                 className={`flex items-center gap-1.5 px-3 py-1.5 text-xs md:text-sm font-bold rounded-lg transition-all border ${isFormatPainterActive ? 'bg-blue-600 text-white border-blue-600 shadow-md' : 'bg-white text-slate-500 hover:bg-slate-100 border-slate-200 shadow-sm'}`}
+                                 title="开启/关闭时段批量复制格式刷"
+                             >
+                                 <PaintbrushIcon className="w-4 h-4"/>
+                                 {isFormatPainterActive ? '关闭刷子' : '格式刷'}
+                             </button>
+                         </div>
+                     </div>
+
+                     {/* 5.1 调整间距，为了让时间文字排布更紧凑协调 */}
+                     <div className={`grid grid-cols-12 gap-1 md:gap-2 ${isFormatPainterActive && painterSourceSlot ? 'cursor-crosshair' : ''}`}>
+                         {slotElements}
+                     </div>
+                 </div>
+              </div>
+            );
+          };
+
+          const renderSlotView = () => {
+             return (
+                 <div className="flex flex-col items-center justify-center h-full">
+                    <div className="text-8xl md:text-[120px] font-black text-transparent bg-clip-text bg-gradient-to-br from-slate-700 to-slate-900 leading-none drop-shadow-sm mb-4">
+                        {selectedSlot}
+                    </div>
+                    <div className="text-2xl md:text-3xl font-extrabold text-blue-600 bg-blue-50 px-6 py-2 rounded-2xl border border-blue-100 shadow-sm flex items-center gap-2">
+                        <ClockIcon className="w-6 h-6"/> {getSlotTimeString(selectedSlot)}
+                    </div>
+                    <p className="mt-8 text-slate-400 font-medium text-sm flex items-center gap-1">
+                        <Info className="w-4 h-4"/> 请在右侧面板选择颜色标签并填写事项
+                    </p>
+                 </div>
+             )
+          };
+
+          const renderCurrentView = () => {
+            if (currentView === 'slot') return renderSlotView();
+            if (currentView === 'day') return renderDayView();
+            if (displayMode === 'plan') {
+                switch(currentView) { case 'year': return renderYearPlanView(); case 'quarter': return renderQuarterPlanView(); case 'month': return renderMonthPlanView(); case 'week': return renderWeekPlanView(); default: return renderMonthPlanView(); }
+            } else {
+                switch(currentView) { case 'year': return renderYearView(); case 'quarter': return renderQuarterView(); case 'month': return renderMonthView(); case 'week': return renderWeekView(); default: return renderMonthView(); }
+            }
+          };
+
+          const currentPeriodName = periodNames[activeInfo.key] || '';
+
+          return (
+            <div className="w-full h-full max-w-[1400px] max-h-[800px] aspect-auto md:aspect-video flex flex-col font-sans relative">
+              
+              {toastMsg && (
+                <div className="fixed top-6 left-1/2 transform -translate-x-1/2 bg-slate-800 text-white px-6 py-3 rounded-2xl shadow-2xl z-50 text-sm font-medium animate-[bounce_1s_infinite]">
+                  {toastMsg}
+                </div>
+              )}
+
+              {/* 顶部控制台 */}
+              <div className="mb-4 flex flex-col sm:flex-row items-center justify-between gap-2 md:gap-4 shrink-0 px-2 md:px-0">
+                <div className="flex items-center">
+                    <h1 className="text-2xl md:text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600 tracking-tight flex items-center drop-shadow-sm">
+                      iTime大宙司 
+                      <span className="text-[10px] md:text-xs font-bold text-white bg-gradient-to-r from-blue-500 to-indigo-500 px-2 py-0.5 rounded-full ml-2 shadow-md">
+                        v5.3
+                      </span>
+                    </h1>
+                    {currentView !== 'day' && currentView !== 'slot' && (
+                        <div className="flex bg-slate-200/60 rounded-lg p-1 ml-4 border border-slate-200">
+                            <button onClick={()=>setDisplayMode('calendar')} className={`flex items-center gap-1 px-3 py-1 text-xs md:text-sm font-bold rounded-md transition-all ${displayMode === 'calendar' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:bg-slate-200'}`}>
+                                <LayoutGrid className="w-4 h-4"/> 日历
+                            </button>
+                            <button onClick={()=>setDisplayMode('plan')} className={`flex items-center gap-1 px-3 py-1 text-xs md:text-sm font-bold rounded-md transition-all ${displayMode === 'plan' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:bg-slate-200'}`}>
+                                <ListTodo className="w-4 h-4"/> 规划
+                            </button>
+                        </div>
+                    )}
+                </div>
+                <div className="flex bg-white rounded-full p-1 shadow-sm border border-slate-200 flex-wrap justify-center">
+                  {viewOptions.map(opt => (
+                    <button key={opt.id} onClick={() => { setIsFormatPainterActive(false); setCurrentView(opt.id); if (opt.id === 'day' || opt.id === 'slot') setCurrentDate(selectedDate); }}
+                      className={`px-3 py-1 text-xs md:text-sm font-medium rounded-full transition-all duration-300 ${currentView === opt.id ? 'bg-blue-600 text-white shadow-md' : 'text-slate-600 hover:bg-slate-100'} ${opt.id === 'slot' && currentView !== 'slot' && currentView !== 'day' ? 'hidden sm:inline-block' : ''}`}>
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 主面板容器 */}
+              <div ref={captureRef} className="flex-grow bg-white rounded-2xl md:rounded-[2rem] shadow-2xl overflow-hidden flex flex-col md:flex-row relative border border-slate-100/50">
+                
+                {/* 左侧：视图展示区 */}
+                <div className="w-full md:w-[68%] p-4 md:p-6 border-b md:border-b-0 md:border-r border-slate-100 bg-slate-50/30 flex flex-col h-full overflow-hidden relative">
+                  {/* 时段视图顶部返回按钮 */}
+                  {currentView === 'slot' && (
+                     <button onClick={() => setCurrentView('day')} className="absolute top-6 left-6 z-10 flex items-center gap-1 text-sm font-bold text-slate-500 hover:text-blue-600 bg-white/80 backdrop-blur px-3 py-1.5 rounded-xl border border-slate-200 shadow-sm transition-all">
+                        <ChevronLeft className="w-4 h-4"/> 返回日视图
+                     </button>
+                  )}
+
+                  <div className={`flex items-center justify-between mb-4 md:mb-6 shrink-0 bg-white p-3 rounded-2xl shadow-sm border border-slate-100/60 ${currentView === 'slot' ? 'mt-12' : ''}`}>
+                    <div className="flex items-center gap-2">
+                      <CalendarIcon className="w-5 h-5 md:w-6 md:h-6 text-blue-600 flex-shrink-0" />
+                      {isEditingName && currentView !== 'day' && currentView !== 'slot' ? (
+                        <div className="flex items-center gap-1 md:gap-2">
+                          <input type="text" autoFocus value={editNameText} onChange={(e) => setEditNameText(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSavePeriodName()} placeholder="输入命名..." className="px-2 py-0.5 md:py-1 text-sm md:text-base font-bold border-2 border-blue-400 rounded-md md:rounded-lg outline-none w-32 md:w-48 text-blue-600" />
+                          <button onClick={handleSavePeriodName} className="text-xs md:text-sm bg-blue-600 text-white px-2 py-1 rounded-md md:rounded-lg">确定</button>
+                        </div>
+                      ) : (
+                        <h2 className="text-lg md:text-xl font-black text-slate-800 flex items-center flex-wrap gap-1 tracking-tight">
+                          {activeInfo.title}
+                          {currentView !== 'day' && currentView !== 'slot' && currentPeriodName && ( <span className="text-blue-600">【{currentPeriodName}】</span> )}
+                          {currentView !== 'day' && currentView !== 'slot' && (
+                            <button onClick={() => { setEditNameText(currentPeriodName || ''); setIsEditingName(true); }} className="ml-1 p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-colors" title="为这段时间命名">
+                              <EditIcon className="w-4 h-4" />
+                            </button>
+                          )}
+                        </h2>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1 md:gap-2">
+                      <button onClick={handleToday} className="hidden sm:block px-2 py-1 md:px-3 md:py-1.5 text-xs md:text-sm font-bold text-blue-600 bg-blue-50 shadow-sm border border-blue-100 rounded-full hover:bg-blue-100 transition-colors"> 返回今天 </button>
+                      <div className="flex bg-slate-50 rounded-full p-0.5 border border-slate-200 shadow-sm">
+                        <button onClick={handlePrevPeriod} className="p-1 md:p-1.5 rounded-full hover:bg-white hover:shadow-sm transition-all text-slate-600"><ChevronLeft className="w-4 h-4 md:w-5 md:h-5" /></button>
+                        <button onClick={handleNextPeriod} className="p-1 md:p-1.5 rounded-full hover:bg-white hover:shadow-sm transition-all text-slate-600"><ChevronRight className="w-4 h-4 md:w-5 md:h-5" /></button>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex-grow overflow-hidden">{renderCurrentView()}</div>
+                </div>
+
+                {/* 右侧：绑定输入与高级操作 */}
+                <div className="w-full md:w-[32%] bg-white p-4 md:p-6 flex flex-col h-full overflow-y-auto no-scrollbar relative z-10">
+                  <div className="mb-4 shrink-0">
+                    <h3 className="text-xs font-bold text-blue-500 uppercase tracking-widest mb-1 flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span> {activeInfo.prefix}目标
+                    </h3>
+                    <p className="text-lg md:text-xl font-black text-slate-800 border-b border-slate-100 pb-2"> {activeInfo.title} </p>
+                  </div>
+
+                  {/* 5.0 升级：时段专属五色便签选择器 */}
+                  {currentView === 'slot' && (
+                    <div className="mb-3 shrink-0 flex items-center justify-between bg-slate-50 p-2 rounded-xl border border-slate-100">
+                        <span className="text-xs font-bold text-slate-500 ml-1">颜色标签</span>
+                        <div className="flex gap-2">
+                            {colorOptions.map(c => (
+                                <button key={c.id} onClick={() => handleColorSelect(c.id, c.prefix)} title={`${c.label} (${c.prefix})`}
+                                    className={`w-6 h-6 rounded-full shadow-inner transition-transform hover:scale-110 ${c.bg} ${currentSlotColor === c.id ? `ring-2 ring-offset-2 ${c.ring}` : 'opacity-70 hover:opacity-100'}`}
+                                ></button>
+                            ))}
+                            {/* 默认清除按钮 */}
+                            <button onClick={() => setCurrentSlotColor('default')} title="清除颜色"
+                                className={`w-6 h-6 rounded-full border-2 border-dashed border-slate-300 hover:border-slate-500 flex items-center justify-center ${currentSlotColor === 'default' ? 'bg-slate-200' : 'bg-transparent'}`}
+                            ><div className="w-3 h-0.5 bg-slate-400 rotate-45"></div></button>
+                        </div>
+                    </div>
+                  )}
+
+                  <div className="flex-grow flex flex-col min-h-[150px]">
+                    <label className="text-xs md:text-sm font-semibold text-slate-600 mb-2 flex items-center gap-1.5">📝 {activeInfo.prefix}事项与规划</label>
+                    <textarea value={currentNoteText} onChange={(e) => setCurrentNoteText(e.target.value)} placeholder={`在这里为 ${activeInfo.title} 制定核心计划与备忘录...`} className="flex-grow w-full resize-none rounded-xl border-2 border-slate-100 p-3 md:p-4 text-sm md:text-base focus:ring-0 focus:border-blue-400 outline-none bg-slate-50 text-slate-700 transition-all leading-relaxed shadow-inner"></textarea>
+                  </div>
+
+                  {/* 操作中心 */}
+                  <div className="mt-4 pt-4 border-t border-slate-100 space-y-3 shrink-0">
+                    <button onClick={handleSaveNote} className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-blue-500 text-white font-bold py-2 md:py-3 px-4 rounded-xl hover:from-blue-700 hover:to-blue-600 transition-all shadow-lg shadow-blue-500/30 text-sm md:text-base active:scale-[0.98]">
+                      <Save className="w-4 h-4 md:w-5 md:h-5" /> <span>保存{activeInfo.prefix}规划</span>
+                    </button>
+                    
+                    <div className="grid grid-cols-2 gap-2">
+                      <button onClick={handleExportImage} className="flex items-center justify-center gap-1.5 bg-indigo-50 text-indigo-600 font-bold py-2 rounded-xl hover:bg-indigo-100 transition-all border border-indigo-100 text-[11px] md:text-xs">
+                        <ImageIcon className="w-3.5 h-3.5" /> 导出PNG
+                      </button>
+                      <button onClick={handleExportMindMap} className="flex items-center justify-center gap-1.5 bg-emerald-50 text-emerald-600 font-bold py-2 rounded-xl hover:bg-emerald-100 transition-all border border-emerald-100 text-[11px] md:text-xs">
+                        <MindMapIcon className="w-3.5 h-3.5" /> 导思维导图
+                      </button>
+                      <button onClick={handleExportCSV} className="flex items-center justify-center gap-1.5 bg-orange-50 text-orange-600 font-bold py-2 rounded-xl hover:bg-orange-100 transition-all border border-orange-100 text-[11px] md:text-xs">
+                        <TableIcon className="w-3.5 h-3.5" /> 导数据表
+                      </button>
+                      <div className="flex gap-1">
+                        <button onClick={handleExportData} className="flex-1 flex items-center justify-center bg-slate-50 border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-100 transition-colors text-[10px] md:text-xs font-semibold"> 导出JS </button>
+                        <button onClick={() => fileInputRef.current?.click()} className="flex-1 flex items-center justify-center bg-slate-50 border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-100 transition-colors text-[10px] md:text-xs font-semibold"> 导入JS </button>
+                      </div>
+                    </div>
+                    <input type="file" accept=".json,.js" ref={fileInputRef} onChange={handleImportData} className="hidden" />
+                  </div>
+                </div>
+
+              </div>
+            </div>
+          );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
