@@ -5,6 +5,10 @@
       =========================================
       开发更新日志 (Version Log)
       =========================================
+      [Edu助力萌学-v3.0]
+      - 移动端单屏重构：在手机端引入顶部Tab切换（知识视图 vs 操作评估），彻底消除长页面滑动，实现单屏聚合。
+      - 全局进度统计：在学科、单元、知识点卡片中引入穿透式统计引擎。实时计算底层达到“熟练”的考点数量，并直观展示局部熟练度与占全科进度的百分比。
+
       [Edu助力萌学-v2.0]
       - UI响应式优化：全面重构了“核心大纲”一级视图的移动端布局。在手机端自动切换为紧凑型横向列表，无需滚动即可一览所有学科；PC端保持大卡片展示。
 
@@ -23,7 +27,7 @@
     -->
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Edu助力萌学-五年级下册系统v2.0</title>
+    <title>Edu助力萌学-五年级下册系统v3.0</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
@@ -179,6 +183,9 @@
             // 路径追踪：例如 ['数学', '第一单元 简易方程', '解方程']
             const [navPath, setNavPath] = useState([]); 
             
+            // v3.0: 移动端专属Tab状态 ('view'=知识大纲视图, 'panel'=右侧操作面板)
+            const [mobileTab, setMobileTab] = useState('view');
+
             // 数据存储：键名为全路径拼接，例如 "数学-第一单元 简易方程-解方程"
             const [notes, setNotes] = useState(() => {
                 const saved = localStorage.getItem('edu_notes');
@@ -237,6 +244,64 @@
                 setTimeout(() => setToastMsg(null), 3000);
             };
 
+            // --- 学情统计引擎 (v3.0 新增) ---
+            // 递归穿透计算当前路径下的考点总数，以及达到“熟练(green)”的考点数
+            const calculateStats = (pathArr) => {
+                if (!pathArr || pathArr.length === 0) return { localTotal: 0, localProficient: 0, subjectTotal: 0, subjectPct: 0, localPct: 0 };
+                const subject = pathArr[0];
+                let subjectTotal = 0;
+                let subjectProficient = 0;
+
+                const traverse = (data, currentPath, isSubjectScope) => {
+                    let locTotal = 0;
+                    let locProf = 0;
+                    if (Array.isArray(data)) {
+                        data.forEach(tp => {
+                            const key = getPathKey([...currentPath, tp]);
+                            const isProf = masteryColors[key] === 'green'; // 判定为“熟练”
+                            if (isSubjectScope) {
+                                subjectTotal++;
+                                if (isProf) subjectProficient++;
+                            }
+                            locTotal++;
+                            if (isProf) locProf++;
+                        });
+                    } else if (typeof data === 'object') {
+                        Object.keys(data).forEach(k => {
+                            const res = traverse(data[k], [...currentPath, k], isSubjectScope);
+                            locTotal += res.locTotal;
+                            locProf += res.locProf;
+                        });
+                    }
+                    return { locTotal, locProf };
+                };
+
+                // 1. 计算该学科的全局大盘数据
+                if (subject && syllabusData[subject]) {
+                    traverse(syllabusData[subject], [subject], true);
+                }
+
+                // 2. 计算当前局部模块（单元/知识点）的数据
+                let subTree = syllabusData;
+                for (let i = 0; i < pathArr.length; i++) {
+                    subTree = subTree[pathArr[i]];
+                    if (!subTree) break;
+                }
+
+                let localTotal = 0;
+                let localProficient = 0;
+                if (subTree) {
+                    const res = traverse(subTree, pathArr, false);
+                    localTotal = res.locTotal;
+                    localProficient = res.locProf;
+                }
+
+                const localPct = localTotal === 0 ? 0 : Math.round((localProficient / localTotal) * 100);
+                const subjectPct = subjectTotal === 0 ? 0 : Math.round((localProficient / subjectTotal) * 100);
+
+                return { localTotal, localProficient, subjectTotal, subjectPct, localPct };
+            };
+
             useEffect(() => {
                 setCurrentNoteText(notes[activeInfo.key] || '');
                 setCurrentMasteryColor(masteryColors[activeInfo.key] || 'default');
@@ -253,6 +318,7 @@
                 setIsFormatPainterActive(false);
                 setNavPath(navPath.slice(0, levelIndex));
                 setViewLevel(levelIndex);
+                setMobileTab('view'); // 切换层级时，手机端自动切回视图
             };
 
             const handleNavigateUp = () => {
@@ -260,6 +326,7 @@
                     setIsFormatPainterActive(false);
                     setNavPath(navPath.slice(0, navPath.length - 1));
                     setViewLevel(viewLevel - 1);
+                    setMobileTab('view'); // 返回上级时，切回视图
                 }
             };
 
@@ -268,6 +335,7 @@
                 const newPath = [...navPath, nodeName];
                 setNavPath(newPath);
                 setViewLevel(viewLevel + 1);
+                setMobileTab('view'); // 深入层级时，切回视图
             };
 
             // --- 保存与操作 ---
@@ -470,19 +538,31 @@
                             const bgColors = ['bg-blue-50', 'bg-emerald-50', 'bg-orange-50'];
                             const textColors = ['text-blue-600', 'text-emerald-600', 'text-orange-600'];
                             const borderColors = ['hover:border-blue-300', 'hover:border-emerald-300', 'hover:border-orange-300'];
+                            
+                            // 获取学科统计数据
+                            const stats = calculateStats([sub]);
+
                             return (
                                 <div key={sub} onClick={() => handleNodeClick(sub)} 
                                      className={`p-4 md:p-6 rounded-[2rem] border border-slate-200 shadow-sm flex flex-row md:flex-col cursor-pointer transition-all group ${bgColors[idx%3]} ${borderColors[idx%3]} hover:shadow-md min-h-[90px] md:h-80 items-center`}>
                                     <div className="flex-shrink-0 mr-4 md:mr-0 md:flex-grow md:flex md:flex-col md:items-center md:justify-center">
                                         <BookOpen className={`w-10 h-10 md:w-16 md:h-16 ${textColors[idx%3]} md:mb-4 opacity-80 group-hover:scale-110 transition-transform`} />
                                     </div>
-                                    <div className="flex-grow flex flex-col justify-center text-left md:text-center">
-                                        <h3 className={`text-xl md:text-3xl font-black ${textColors[idx%3]} mb-0.5 md:mb-2`}>{sub}</h3>
+                                    <div className="flex-grow flex flex-col justify-center text-left md:text-center w-full">
+                                        <h3 className={`text-xl md:text-3xl font-black ${textColors[idx%3]} mb-0.5 md:mb-1`}>{sub}</h3>
                                         <p className="text-slate-500 text-xs md:text-sm font-medium">{cName || '扬州地区考纲'}</p>
+                                        
+                                        {/* 进度条装配 (v3.0) */}
+                                        <div className="w-full max-w-[140px] md:max-w-[180px] md:mx-auto mt-2 md:mt-3 bg-white/60 rounded-full h-1.5 md:h-2 shadow-inner border border-slate-200/50 overflow-hidden">
+                                            <div className="bg-emerald-400 h-full rounded-full transition-all duration-700" style={{ width: `${stats.localPct}%` }}></div>
+                                        </div>
+                                        <div className="text-[10px] md:text-xs font-bold text-slate-500 mt-1 md:mt-1.5 flex items-center md:justify-center gap-1">
+                                            <span>熟练度 {stats.localPct}%</span>
+                                            <span className="opacity-50">({stats.localProficient}/{stats.localTotal})</span>
+                                        </div>
                                     </div>
-                                    <div className="flex-shrink-0 ml-auto md:ml-0 md:w-full md:pt-4 md:border-t border-slate-200/50 flex justify-end md:justify-between items-center">
-                                        <span className="hidden md:inline text-xs font-bold text-slate-400">点击进入单元</span>
-                                        <ChevronRight className={`w-5 h-5 md:w-5 md:h-5 ${textColors[idx%3]}`} />
+                                    <div className="flex-shrink-0 ml-auto md:ml-0 md:w-full md:pt-4 md:border-t border-slate-200/50 flex flex-col justify-center items-end md:items-center">
+                                        <ChevronRight className={`w-5 h-5 md:w-6 md:h-6 ${textColors[idx%3]}`} />
                                     </div>
                                 </div>
                             )
@@ -502,15 +582,29 @@
                             const key = getPathKey(pathArr);
                             const cName = customNames[key] ? `【${customNames[key]}】` : '';
                             const note = notes[key];
+                            
+                            // 获取单元统计数据
+                            const stats = calculateStats(pathArr);
+
                             return (
                                 <div key={unit} onClick={() => handleNodeClick(unit)} 
-                                     className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col cursor-pointer hover:border-blue-300 hover:shadow-md transition-all group">
-                                    <h4 className="font-extrabold text-slate-800 mb-3 flex items-center justify-between text-lg">
-                                        <span>{unit} <span className="text-blue-500 font-normal text-sm">{cName}</span></span>
-                                        <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-blue-500 transition-colors" />
+                                     className="bg-white p-4 md:p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col cursor-pointer hover:border-blue-300 hover:shadow-md transition-all group">
+                                    <h4 className="font-extrabold text-slate-800 mb-2 md:mb-3 flex items-center justify-between text-base md:text-lg">
+                                        <span>{unit} <span className="text-blue-500 font-normal text-xs md:text-sm">{cName}</span></span>
+                                        <ChevronRight className="w-4 h-4 md:w-5 md:h-5 text-slate-300 group-hover:text-blue-500 transition-colors" />
                                     </h4>
-                                    <div className="text-sm text-slate-600 whitespace-pre-wrap flex-grow bg-slate-50 p-3 rounded-xl border border-slate-100 min-h-[80px]">
+                                    <div className="text-xs md:text-sm text-slate-600 whitespace-pre-wrap flex-grow bg-slate-50 p-2 md:p-3 rounded-xl border border-slate-100 min-h-[60px] md:min-h-[80px]">
                                         {note ? note : <span className="opacity-40 italic flex items-center gap-1"><EditIcon className="w-3 h-3"/> 点击右侧记录单元宏观规划...</span>}
+                                    </div>
+                                    
+                                    {/* 单元统计块 (v3.0) */}
+                                    <div className="mt-3 pt-3 border-t border-slate-100/80 flex items-center justify-between text-[10px] md:text-xs">
+                                        <div className="flex items-center gap-1 font-bold text-emerald-600 bg-emerald-50/80 px-2 py-1 rounded-md border border-emerald-100/50">
+                                            <TargetIcon className="w-3 h-3 md:w-3.5 md:h-3.5"/> 单元熟练: {stats.localPct}% ({stats.localProficient}/{stats.localTotal})
+                                        </div>
+                                        <div className="font-bold text-blue-600 bg-blue-50/80 px-2 py-1 rounded-md border border-blue-100/50" title="在全学科总考点中的熟练占比">
+                                            占全科: {stats.subjectPct}%
+                                        </div>
                                     </div>
                                 </div>
                             )
@@ -530,15 +624,29 @@
                             const key = getPathKey(pathArr);
                             const cName = customNames[key] ? `【${customNames[key]}】` : '';
                             const note = notes[key];
+                            
+                            // 获取知识点统计数据
+                            const stats = calculateStats(pathArr);
+
                             return (
                                 <div key={kp} onClick={() => handleNodeClick(kp)} 
                                      className="bg-white p-4 md:p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col cursor-pointer hover:border-emerald-300 hover:shadow-md transition-all group">
-                                    <h4 className="font-extrabold text-emerald-700 mb-3 flex items-center justify-between">
+                                    <h4 className="font-extrabold text-emerald-700 mb-2 md:mb-3 flex items-center justify-between text-sm md:text-base">
                                         <span>{kp} <span className="text-slate-500 font-normal text-xs">{cName}</span></span>
-                                        <TargetIcon className="w-4 h-4 text-emerald-300 group-hover:text-emerald-600" />
+                                        <ChevronRight className="w-4 h-4 text-emerald-300 group-hover:text-emerald-600" />
                                     </h4>
-                                    <div className="text-xs md:text-sm text-slate-600 whitespace-pre-wrap flex-grow bg-emerald-50/50 p-3 rounded-xl border border-emerald-100 min-h-[80px]">
+                                    <div className="text-[11px] md:text-sm text-slate-600 whitespace-pre-wrap flex-grow bg-emerald-50/50 p-2 md:p-3 rounded-xl border border-emerald-100 min-h-[60px] md:min-h-[80px]">
                                         {note ? note : <span className="opacity-40 italic flex items-center gap-1"><EditIcon className="w-3 h-3"/> 核心知识点批注...</span>}
+                                    </div>
+
+                                    {/* 知识点统计块 (v3.0) */}
+                                    <div className="mt-3 pt-3 border-t border-emerald-100/50 flex items-center justify-between text-[10px] md:text-xs">
+                                        <div className="flex items-center gap-1 font-bold text-emerald-600">
+                                            <TargetIcon className="w-3 h-3"/> 掌握度: {stats.localPct}%
+                                        </div>
+                                        <div className="font-bold text-slate-500" title="在全学科总考点中的熟练占比">
+                                            占全科 {stats.subjectPct}%
+                                        </div>
                                     </div>
                                 </div>
                             )
@@ -692,12 +800,12 @@
                             <h1 className="text-2xl md:text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-700 to-emerald-600 tracking-tight flex items-center drop-shadow-sm">
                                 Edu助力萌学
                                 <span className="text-[10px] md:text-xs font-bold text-white bg-gradient-to-r from-blue-500 to-emerald-500 px-2 py-0.5 rounded-full ml-2 shadow-md">
-                                    v2.0
+                                    v3.0
                                 </span>
                             </h1>
                         </div>
                         
-                        {/* 动态面包屑导航 (替代之前的五级视图切换) */}
+                        {/* 动态面包屑导航 */}
                         <div className="flex bg-white rounded-xl md:rounded-full p-1 shadow-sm border border-slate-200 flex-wrap justify-center items-center">
                             <button onClick={() => handleBreadcrumbClick(0)} className={`px-3 py-1.5 text-xs md:text-sm font-bold rounded-full transition-all duration-300 ${viewLevel === 0 ? 'bg-blue-600 text-white shadow-md' : 'text-slate-600 hover:bg-slate-100'}`}>
                                 核心大纲
@@ -713,33 +821,43 @@
                         </div>
                     </div>
 
-                    {/* 主面板容器 */}
-                    <div ref={captureRef} className="flex-grow bg-white rounded-2xl md:rounded-[2rem] shadow-2xl overflow-hidden flex flex-col md:flex-row relative border border-slate-100/50">
+                    {/* 移动端专属：单屏切换栏 (v3.0) */}
+                    <div className="md:hidden flex bg-white rounded-xl shadow-sm border border-slate-200 mb-3 overflow-hidden shrink-0 mx-2">
+                        <button onClick={() => setMobileTab('view')} className={`flex-1 py-2.5 text-xs font-black transition-colors flex justify-center items-center gap-1.5 ${mobileTab === 'view' ? 'bg-blue-50 text-blue-600' : 'text-slate-500 hover:bg-slate-50'}`}>
+                            <BookOpen className="w-4 h-4"/> 知识大纲视图
+                        </button>
+                        <button onClick={() => setMobileTab('panel')} className={`flex-1 py-2.5 text-xs font-black transition-colors flex justify-center items-center gap-1.5 border-l border-slate-200 ${mobileTab === 'panel' ? 'bg-blue-50 text-blue-600' : 'text-slate-500 hover:bg-slate-50'}`}>
+                            <EditIcon className="w-4 h-4"/> 学习评估操作
+                        </button>
+                    </div>
+
+                    {/* 主面板容器 (整合移动端响应式显示逻辑) */}
+                    <div ref={captureRef} className="flex-grow bg-transparent md:bg-white md:rounded-[2rem] md:shadow-2xl overflow-hidden flex flex-col md:flex-row relative md:border border-slate-100/50 mx-2 md:mx-0">
                         
                         {/* 左侧：内容展示区 */}
-                        <div className="w-full md:w-[68%] p-4 md:p-6 border-b md:border-b-0 md:border-r border-slate-100 bg-slate-50/40 flex flex-col h-full overflow-hidden relative">
+                        <div className={`w-full md:w-[68%] p-3 md:p-6 bg-white md:bg-slate-50/40 rounded-2xl md:rounded-none md:border-r border-slate-100 flex-col h-full overflow-hidden relative shadow-sm md:shadow-none ${mobileTab === 'view' ? 'flex' : 'hidden md:flex'}`}>
                             
                             {/* 返回上一级按钮 */}
                             {viewLevel > 0 && (
-                                <button onClick={handleNavigateUp} className="absolute top-6 left-6 z-10 flex items-center gap-1 text-sm font-bold text-slate-500 hover:text-blue-600 bg-white/90 backdrop-blur px-3 py-1.5 rounded-xl border border-slate-200 shadow-sm transition-all hover:shadow-md">
-                                    <ChevronLeft className="w-4 h-4"/> 返回上一级
+                                <button onClick={handleNavigateUp} className="absolute top-5 left-5 z-10 flex items-center gap-1 text-[11px] md:text-sm font-bold text-slate-500 hover:text-blue-600 bg-white/90 backdrop-blur px-2.5 py-1.5 md:px-3 rounded-lg md:rounded-xl border border-slate-200 shadow-sm transition-all hover:shadow-md">
+                                    <ChevronLeft className="w-3 h-3 md:w-4 md:h-4"/> 返回上一级
                                 </button>
                             )}
 
-                            <div className={`flex items-center justify-between mb-4 md:mb-6 shrink-0 bg-white p-3 md:p-4 rounded-2xl shadow-sm border border-slate-100/80 ${viewLevel > 0 ? 'mt-14 md:mt-0 md:ml-32' : ''}`}>
+                            <div className={`flex items-center justify-between mb-4 md:mb-6 shrink-0 bg-white p-3 md:p-4 rounded-2xl shadow-sm border border-slate-100/80 ${viewLevel > 0 ? 'mt-12 md:mt-0 md:ml-32' : ''}`}>
                                 <div className="flex items-center gap-3">
-                                    <BookOpen className="w-6 h-6 text-blue-600 flex-shrink-0" />
+                                    <BookOpen className="w-5 h-5 md:w-6 md:h-6 text-blue-600 flex-shrink-0" />
                                     {isEditingName ? (
                                         <div className="flex items-center gap-2">
-                                            <input type="text" autoFocus value={editNameText} onChange={(e) => setEditNameText(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSavePeriodName()} placeholder="自定义副标题..." className="px-3 py-1 text-sm md:text-base font-bold border-2 border-blue-400 rounded-lg outline-none w-32 md:w-64 text-blue-700 bg-blue-50" />
+                                            <input type="text" autoFocus value={editNameText} onChange={(e) => setEditNameText(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSavePeriodName()} placeholder="自定义副标题..." className="px-3 py-1 text-sm md:text-base font-bold border-2 border-blue-400 rounded-lg outline-none w-28 md:w-64 text-blue-700 bg-blue-50" />
                                             <button onClick={handleSavePeriodName} className="text-sm bg-blue-600 text-white px-3 py-1 rounded-lg font-bold shadow-sm hover:bg-blue-700">确定</button>
                                         </div>
                                     ) : (
-                                        <h2 className="text-lg md:text-xl font-black text-slate-800 flex items-center flex-wrap gap-1 tracking-tight">
+                                        <h2 className="text-base md:text-xl font-black text-slate-800 flex items-center flex-wrap gap-1 tracking-tight">
                                             {activeInfo.title}
-                                            {currentCustomName && ( <span className="text-blue-600 text-base">【{currentCustomName}】</span> )}
-                                            <button onClick={() => { setEditNameText(currentCustomName || ''); setIsEditingName(true); }} className="ml-2 p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="添加自定义批注/时间">
-                                                <EditIcon className="w-4 h-4" />
+                                            {currentCustomName && ( <span className="text-blue-600 text-sm md:text-base">【{currentCustomName}】</span> )}
+                                            <button onClick={() => { setEditNameText(currentCustomName || ''); setIsEditingName(true); }} className="ml-1 p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="添加自定义批注">
+                                                <EditIcon className="w-3.5 h-3.5 md:w-4 md:h-4" />
                                             </button>
                                         </h2>
                                     )}
@@ -750,7 +868,7 @@
                         </div>
 
                         {/* 右侧：绑定输入与高级操作 */}
-                        <div className="w-full md:w-[32%] bg-white p-4 md:p-6 flex flex-col h-full overflow-y-auto no-scrollbar relative z-10">
+                        <div className={`w-full md:w-[32%] bg-white rounded-2xl md:rounded-none shadow-sm md:shadow-none p-4 md:p-6 flex-col h-full overflow-y-auto no-scrollbar relative z-10 ${mobileTab === 'panel' ? 'flex' : 'hidden md:flex'}`}>
                             <div className="mb-4 shrink-0">
                                 <h3 className="text-xs font-bold text-blue-500 uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
                                     <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span> 当前聚焦：{activeInfo.prefix}
