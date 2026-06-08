@@ -5,6 +5,15 @@
       =========================================
       开发更新日志 (Version Log)
       =========================================
+      [Edu助力萌学-v4.0]
+      - 英语体系全面升级：完整录入五年级下册 Unit 1 至 Unit 8 核心词汇表。
+      - 层级规范化：英语模块严格按“词汇 (Vocabulary)”和“语法与句型 (Grammar)”分类，底层考点完美适配高密度网格渲染。
+
+      [Edu助力萌学-v3.4]
+      - 数学知识图谱深度优化：针对数学学科特性重构了数据表达方式。
+      - 富文本解析引擎：考点支持使用 `_关键词_` 语法渲染下划线。
+      - 规范化表达：将所有数学考点严格分类为【公式】、【计算】、【概念】，并对重点概念下划线高亮，直接展示计算模板与代数式，极大提高了复习指向性。
+
       [Edu助力萌学-v3.0]
       - 移动端单屏重构：在手机端引入顶部Tab切换（知识视图 vs 操作评估），彻底消除长页面滑动，实现单屏聚合。
       - 全局进度统计：在学科、单元、知识点卡片中引入穿透式统计引擎。实时计算底层达到“熟练”的考点数量，并直观展示局部熟练度与占全科进度的百分比。
@@ -17,17 +26,11 @@
       - 颗粒度下钻：第四层级精细到具体词汇、一二类生字拼音、具体公式与语法。
       - 状态更新：学情掌握评估精简重构为“不会、不熟、待固、熟练”四类直观状态。
       - UI优化：优化底层考点矩阵网格，适配短单词与拼音的高密度展示。
-
-      [Edu-v1.0] 学情追踪大宙司 1.0 (基于 iTime 5.3 核心)
-      - 架构重构：将时间流转(年>季>月>周>日>时段)重构为知识流转(全局>学科>单元>知识点>具体考点)。
-      - 数据预置：内置扬州地区五年级下册（语文、数学、英语）主流大纲结构。
-      - 状态升级：时段五色标签重构为“掌握程度”（未学/薄弱/巩固/熟练/超纲）。
-      - 导出兼容：CSV与思维导图导出逻辑适配知识图谱的深度层级。
       =========================================
     -->
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Edu助力萌学-五年级下册系统v3.0</title>
+    <title>Edu助力萌学-五年级下册系统v4.0</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
@@ -58,121 +61,195 @@
         const TableIcon = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M3 3v18h18V3H3z"/><path d="M3 9h18"/><path d="M3 15h18"/><path d="M9 3v18"/><path d="M15 3v18"/></svg>);
         const TargetIcon = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>);
         const PaintbrushIcon = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="m9.06 11.9 8.07-8.06a2.85 2.85 0 1 1 4.03 4.03l-8.06 8.08"/><path d="M7.07 14.94c-1.66 0-3 1.35-3 3.02 0 1.33-2.5 1.52-2 2.02 1.08 1.1 2.49 2.02 4 2.02 2.2 0 4-1.8 4-4.04a3.01 3.01 0 0 0-3-3.02z"/></svg>);
+        const ChevronDown = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="m6 9 6 6 6-6"/></svg>);
+        const ChevronUp = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="m18 15-6-6-6 6"/></svg>);
 
-        // --- Mock Data (五年级下册 全学科详尽考点大纲) ---
+        // --- 富文本解析器 (v3.4 新增) ---
+        // 将字符串中的 _关键词_ 转换为带有下划线样式的HTML，用于高亮概念与公式
+        const renderRichText = (text) => {
+            let safeText = String(text).replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            safeText = safeText.replace(/_(.*?)_/g, '<u class="decoration-blue-500 decoration-2 underline-offset-2">$1</u>');
+            return { __html: safeText };
+        };
+
+        // --- Mock Data (五年级下册考点大纲与核心词汇/题型库) ---
         const syllabusData = {
             "语文": {
-                "第一单元 童年往事": {
-                    "一类字(会写)": ["昼 (zhòu)", "耘 (yún)", "桑 (sāng)", "晓 (xiǎo)", "蝶 (dié)", "拔 (bá)", "瞎 (xiā)", "铲 (chǎn)", "割 (gē)", "承 (chéng)", "逛 (guàng)"],
-                    "二类字(会认与易错拼音)": ["漪 (yī)", "倭 (wō)", "瓢 (piáo)", "啃 (kěn)", "樱 (yīng)", "蚌 (bàng)", "嘟 (dū)", "啰 (luō)"],
-                    "古诗词背诵与释义": ["《四时田园杂兴(其三十一)》", "《稚子弄冰》", "《村晚》", "童孙未解供耕织(释义)", "敲成玉磬穿林响(释义)"],
-                    "语文园地与基础": ["排比句的修辞作用", "拟人句仿写", "病句:成分残缺修改", "日积月累:《游子吟》"]
+                "第一单元": {
+                    "1《古诗三首》写字表": ["昼 (zhòu)：白昼", "耘 (yún)：耕耘", "桑 (sāng)：桑树", "晓 (xiǎo)：拂晓"],
+                    "2《祖父的园子》写字表": ["蝴 (hú)：蝴蝶", "蚱 (zhà)：蚂蚱", "嗡 (wēng)：嗡嗡", "樱 (yīng)：樱桃", "拔 (bá)：拔草", "瞎 (xiā)：瞎说", "铲 (chǎn)：铲子", "锄 (chú)：锄头", "割 (gē)：割草", "承 (chéng)：承认", "拴 (shuān)：拴住", "瓢 (piáo)：水瓢", "逛 (guàng)：逛街"],
+                    "3《月是故乡明》写字表": ["渺 (miǎo)：浩渺", "篝 (gōu)：篝火", "萌 (méng)：萌发", "澄 (chéng)：澄澈", "澈 (chè)：清澈", "旖 (yǐ)：旖旎", "旎 (nǐ)：旖旎", "瑞 (ruì)：祥瑞", "莱 (lái)：莱茵河", "垠 (yín)：无垠"],
+                    "4《梅花魂》写字表": ["葬 (zàng)：埋葬", "秉 (bǐng)：秉性/秉持", "腮 (sāi)：腮边", "玷 (diàn)：玷污", "谓 (wèi)：所谓", "啸 (xiào)：呼啸", "芜 (wú)：荒芜", "矶 (jī)：钓鱼矶", "盔 (kuī)：头盔"]
                 },
-                "第二单元 古典名著": {
-                    "一类字(会写)": ["妒 (dù)", "忌 (jì)", "曹 (cáo)", "督 (dū)", "委 (wěi)", "鲁 (lǔ)", "遮 (zhē)", "擂 (léi)", "呐 (nà)"],
-                    "二类字(会认与易错拼音)": ["瑜 (yú)", "幔 (màn)", "弩 (nǔ)", "丞 (chéng)", "踉 (liàng)", "跄 (qiàng)", "楷 (kǎi)", "猕 (mí)"],
-                    "课文内容与人物分析": ["《草船借箭》起因经过结果", "诸葛亮人物形象(神机妙算)", "武松打虎动作词语赏析", "石猴出世过程概括"],
-                    "语文园地与基础": ["歇后语积累(草船借箭-满载而归)", "古典小说词句理解", "名著阅读方法指导"]
+                "第二单元": {
+                    "5《草船借箭》写字表": ["妒 (dù)：妒忌", "忌 (jì)：忌讳", "曹 (cáo)：姓曹", "督 (dū)：都督", "委 (wěi)：委屈", "惩 (chéng)：惩罚", "鲁 (lǔ)：鲁莽", "遮 (zhē)：遮挡", "私 (sī)：自私", "寨 (zhài)：山寨", "擂 (léi)：擂鼓", "呐 (nà)：呐喊", "插 (chā)：插秧"],
+                    "6《景阳冈》写字表": ["冈 (gāng)：山冈", "饥 (jī)：饥饿", "碟 (dié)：碟子", "俺 (ǎn)：俺们", "杖 (zhàng)：拐杖", "宰 (zǎi)：宰杀", "炊 (chuī)：炊烟", "俱 (jù)：俱全", "傍 (bàng)：傍晚", "拖 (tuō)：拖拉", "悉 (xī)：熟悉", "纹 (wén)：花纹", "霹 (pī)：霹雳", "雳 (lì)：霹雳"],
+                    "7《猴王出世》写字表": ["芝 (zhī)：芝麻", "遂 (suì)：顺遂", "迸 (bèng)：迸裂", "涧 (jiàn)：山涧", "獐 (zhāng)：獐子", "猕 (mí)：猕猴", "猿 (yuán)：猿猴", "挈 (qiè)：提挈", "瞑 (míng)：瞑目", "窍 (qiào)：窍门", "碣 (jié)：石碣", "楷 (kǎi)：楷书", "镌 (juān)：镌刻", "挠 (náo)：阻挠"],
+                    "8《红楼春趣》写字表": ["恰 (qià)：恰当", "屉 (tì)：抽屉", "嫣 (yān)：嫣然", "讳 (huì)：忌讳", "晦 (huì)：晦暗", "墩 (dūn)：土墩", "钗 (chāi)：金钗", "敞 (chǎng)：宽敞", "雯 (wén)：雯云", "袭 (xí)：袭击", "喇 (lǎ)：喇叭"]
                 },
-                "第三单元 综合性学习": {
-                    "汉字演变": ["甲骨文特点", "金文特点", "小篆特点", "隶书与楷书的区别"],
-                    "趣味汉字": ["字谜竞猜与解析", "谐音歇后语(外甥打灯笼-照旧)", "错别字纠正(街头招牌广告语)"]
+                "第三单元": {
+                    "9《古诗三首》写字表": ["仞 (rèn)：万仞", "岳 (yuè)：山岳", "蓟 (jì)：蓟北", "涕 (tì)：鼻涕", "裳 (cháng)：衣裳", "襄 (xiāng)：襄阳"],
+                    "10《青山处处埋忠骨》写字表": ["彭 (péng)：彭总", "拟 (nǐ)：拟定", "谋 (móu)：计谋", "赴 (fù)：奔赴", "殊 (shū)：特殊", "踌 (chóu)：踌躇", "躇 (chú)：踌躇", "黯 (àn)：黯然", "革 (gé)：革命"],
+                    "11《军神》写字表": ["沃 (wò)：肥沃", "匪 (fěi)：土匪", "绷 (bēng)：绷带", "衷 (zhōng)：衷心", "堪 (kān)：不堪"],
+                    "12《清贫》写字表": ["筹 (chóu)：筹集", "矜 (jīn)：矜持", "俘 (fú)：俘虏", "镯 (zhuó)：手镯", "吓 (hè)：恐吓", "裆 (dāng)：裤裆", "企 (qǐ)：企业", "彼 (bǐ)：彼此", "褂 (guà)：褂子", "坞 (wù)：山坞"]
                 },
-                "第四单元 家国情怀": {
-                    "一类字(会写)": ["仞 (rèn)", "岳 (yuè)", "摩 (mó)", "遗 (yí)", "涕 (tì)", "赴 (fù)", "筹 (chóu)", "黯 (àn)"],
-                    "古诗背诵与情感": ["《从军行》背诵", "《秋夜将晓出篱门迎凉有感》", "《闻官军收河南河北》情感线索"],
-                    "课文理解": ["《青山处处埋忠骨》毛主席心理描写", "《军神》刘伯承坚强意志分析", "《清贫》方志敏精神品质"]
+                "第四单元": {
+                    "13《人物描写一组》写字表": ["嘎 (gǎ)：嘎子", "绊 (bàn)：绊倒", "揪 (jiū)：揪住", "扳 (bān)：扳手", "腕 (wàn)：手腕", "铸 (zhù)：铸造", "颧 (quán)：颧骨", "疤 (bā)：伤疤", "监 (jiān)：监督", "侄 (zhí)：侄子", "痰 (tán)：吐痰", "揩 (kāi)：揩油"],
+                    "14《刷子李》写字表": ["浆 (jiāng)：泥浆", "傅 (fù)：师傅", "袱 (fú)：包袱", "蘸 (zhàn)：蘸水", "馅 (xiàn)：肉馅", "诈 (zhà)：诈骗", "怔 (zhèng)：发怔"],
+                    "15《自相矛盾》写字表": ["吾 (wú)：吾辈", "弗 (fú)：自愧弗如", "夫 (fú)：夫不可陷", "矛 (máo)：矛盾", "盾 (dùn)：盾牌"],
+                    "16《田忌赛马》写字表": ["策 (cè)：策略", "荐 (jiàn)：推荐", "赢 (yíng)：输赢", "拳 (quán)：拳头", "擦 (cā)：擦汗", "兼 (jiān)：兼顾"],
+                    "17《跳水》写字表": ["肆 (sì)：放肆", "桅 (wéi)：桅杆", "撕 (sī)：撕开", "唬 (hǔ)：吓唬", "咧 (liě)：咧嘴", "舱 (cāng)：船舱", "鸥 (ōu)：海鸥", "描 (miáo)：描写"]
                 },
-                "第五单元 描写人物": {
-                    "一类字(会写)": ["跤 (jiāo)", "搂 (lǒu)", "仗 (zhàng)", "鞭 (biān)", "欺 (qī)", "挠 (náo)", "扳 (bān)", "腕 (wàn)"],
-                    "写作手法(人物描写)": ["外貌描写分析", "动作描写赏析(小嘎子)", "语言描写赏析", "侧面烘托手法(刷子李)"]
+                "第五单元": {
+                    "18《威尼斯的小艇》写字表": ["尼 (ní)：尼龙", "艇 (tǐng)：小艇", "叉 (chā)：交叉", "艄 (shāo)：艄公", "翘 (qiào)：翘起", "舱 (cāng)：船舱", "姆 (mǔ)：保姆", "祷 (dǎo)：祷告", "雇 (gù)：雇佣", "哗 (huá)：哗笑"],
+                    "19《牧场之国》写字表": ["仪 (yí)：礼仪", "尊 (zūn)：尊重", "犊 (dú)：牛犊", "茸 (róng)：茸毛", "驹 (jū)：马驹", "膘 (biāo)：肥膘", "垠 (yín)：无垠", "爵 (jué)：爵士", "嗡 (wēng)：嗡嗡", "吆 (yāo)：吆喝", "哞 (mōu)：哞叫"],
+                    "20《金字塔》写字表": ["译 (yì)：翻译", "愧 (kuì)：惭愧", "秽 (huì)：污秽", "埃 (āi)：埃及", "伦 (lún)：伦理", "棱 (léng)：棱角", "湛 (zhàn)：湛蓝", "熔 (róng)：熔化", "遐 (xiá)：遐想", "刃 (rèn)：刀刃"]
                 },
-                "第六单元 思维的火花": {
-                    "一类字(会写)": ["矛 (máo)", "盾 (dùn)", "誉 (yù)", "吾 (wú)", "赢 (yíng)", "拳 (quán)", "擦 (cā)", "逗 (dòu)"],
-                    "文言文与课文": ["《自相矛盾》文言文翻译", "《田忌赛马》对阵图与逻辑", "《跳水》船长思维过程分析"]
-                },
-                "第七单元 异域风情": {
-                    "一类字(会写)": ["尼 (ní)", "斯 (sī)", "艇 (tǐng)", "纵 (zòng)", "艄 (shāo)", "翘 (qiáo)", "垫 (diàn)", "姆 (mǔ)"],
-                    "课文精讲": ["《威尼斯的小艇》动态与静态描写", "《牧场之国》荷兰风光特点", "《金字塔》说明方法(列数字/作比较)"]
-                },
-                "第八单元 幽默和风趣": {
-                    "一类字(会写)": ["梁 (liáng)", "诣 (yì)", "禽 (qín)", "拇 (mǔ)", "搔 (sāo)", "痒 (yǎng)", "秽 (huì)", "轧 (yà)"],
-                    "文言文与课文": ["《杨氏之子》巧妙回答解析", "《手指》拟人化手法", "《童年的发现》幽默语言赏析"]
+                "第六单元": {
+                    "21《杨氏之子》写字表": ["梁 (liáng)：梁国", "惠 (huì)：聪慧", "诣 (yì)：造诣", "乃 (nǎi)：乃至", "曰 (yuē)：名曰", "禽 (qín)：家禽"],
+                    "22《手指》写字表": ["拇 (mǔ)：拇指", "食 (shí)：食指", "指 (zhǐ)：手指", "脂 (zhī)：脂肪", "痒 (yǎng)：瘙痒", "轧 (yà)：轧伤", "拧 (nǐng)：拧开", "螺 (luó)：螺丝", "纽 (niǔ)：纽扣", "扣 (kòu)：扣子", "貌 (mào)：相貌", "仓 (cāng)：仓库"],
+                    "23《童年的发现》写字表": ["胚 (pēi)：胚胎", "祸 (huò)：祸患", "患 (huàn)：患病", "臂 (bì)：手臂", "赋 (fù)：天赋", "淘 (táo)：淘气", "妨 (fáng)：妨碍", "岂 (qǐ)：岂止", "痴 (chī)：痴迷", "厘 (lí)：厘米", "愧 (kuī)：惭愧", "亏 (kuī)：吃亏"]
                 }
             },
             "数学": {
                 "第一单元 简易方程": {
-                    "概念认知": ["等式的意义与判断", "方程的意义与判断", "方程与等式的包含关系"],
-                    "等式的性质": ["等式的性质1(加减同数)", "等式的性质2(乘除同数/非零)"],
-                    "解方程算法": ["x + a = b 型", "x - a = b 型", "a - x = b 型(易错)", "ax = b 型", "x ÷ a = b 型", "ax + b = c 型带入检验"],
-                    "列方程解决问题": ["行程问题公式应用", "购物找零等量关系", "相遇问题(甲路程+乙路程=总路程)", "倍数与差倍问题(设1倍量为x)"]
+                    "等式与方程": [
+                        "公式：等式的性质1 -> 若a=b，则 _a±c = b±c_",
+                        "公式：等式的性质2 -> 若a=b，则 _a×c = b×c_，_a÷c = b÷c_ (c≠0)",
+                        "概念：含有_未知数_的_等式_叫做方程 (两条件缺一不可)",
+                        "【经典题型】判断：含有未知数的式子叫做方程。(×，缺少“等式”条件)"
+                    ],
+                    "解方程": [
+                        "计算：基础解方程 -> _x - 3.5 = 6.5_",
+                        "计算：带括号的复杂方程 -> _2(x - 3) = 11.6_",
+                        "概念：解的检验 -> 把_x的值_代入原方程，若_左边=右边_则解答正确",
+                        "【经典题型】解方程并书写检验过程：5x - 1.5 = 8.5"
+                    ],
+                    "列方程解决问题": [
+                        "公式：相遇问题 -> _(甲速 + 乙速) × 相遇时间 = 总路程_",
+                        "公式：购物问题 -> _单价 × 数量 = 总价_",
+                        "算法：和差倍问题 -> 设_一倍量为x_，几倍量为nx，_x + nx = 和_",
+                        "【经典题型】两地相距600km，甲乙相向开出，甲80km/h，乙70km/h，几小时相遇？"
+                    ]
                 },
                 "第二单元 折线统计图": {
-                    "单式折线统计图": ["描点、连线与标数规范", "分析数量增减变化趋势"],
-                    "复式折线统计图": ["图例的识别与区分绘制", "两组数据的对比分析与未来预测"]
+                    "单式折线统计图": [
+                        "规范：作图三步走 -> _描点_、_连线_、_标数_",
+                        "概念：不仅能看出数量的_多少_，还能看出数量的_增减变化趋势_",
+                        "【经典题型】根据某地气温变化折线图，找出温差最大、升降最快的一天。"
+                    ],
+                    "复式折线统计图": [
+                        "规范：必须有_图例_来区分两条不同的折线",
+                        "应用：便于对两组数据的变化趋势进行_比较和预测_",
+                        "【经典题型】分析甲乙两超市前五个月营业额折线图，预测哪家超市潜力更大。"
+                    ]
                 },
                 "第三单元 因数与倍数": {
-                    "概念与特征": ["因数和倍数的互相依存关系", "找一个数所有因数的方法", "2和5的倍数特征(尾数法)", "3的倍数特征(各位数字之和)"],
-                    "奇偶数与质合数": ["奇数与偶数的概念", "质数与合数的定义辨析", "100以内质数表背诵", "分解质因数(短除法)"],
-                    "公因数与公倍数": ["求最大公因数(短除法/列举法)", "求最小公倍数", "互质数的概念与判断"]
+                    "因数和倍数": [
+                        "概念：若a÷b=c(整数无余数)，则a是b和c的_倍数_，b和c是a的_因数_",
+                        "规律：一个数的最小因数是_1_，最大因数是_它本身_",
+                        "【经典题型】一个数既是24的因数，又是8的倍数，这个数可能是几？(8或24)"
+                    ],
+                    "2,5,3的倍数特征": [
+                        "概念：个位上是0,2,4,6,8的数是_偶数_，不是2的倍数是_奇数_",
+                        "规律：个位是_0或5_的数是5的倍数；同时是2和5的倍数个位必定是_0_",
+                        "规律：一个数_各位上的数字之和_是3的倍数，该数就是3的倍数",
+                        "【经典题型】判断：两个质数的和一定是偶数。(×，如2+3=5)"
+                    ],
+                    "质数与合数": [
+                        "概念：只有_1和它本身_两个因数的数叫质数；有_三个或以上_因数的叫合数",
+                        "规律：_1_既不是质数也不是合数；_2_是唯一的偶数质数",
+                        "计算：分解质因数 -> 用_短除法_把合数写成质数相乘的形式",
+                        "【经典题型】把36分解质因数：36=2×2×3×3"
+                    ]
                 },
                 "第四单元 分数意义和性质": {
-                    "分数的意义": ["单位“1”的理解", "分数单位的概念", "分数与除法的关系(a÷b=a/b)"],
-                    "真假分数与基本性质": ["真分数与假分数的分类", "假分数与带分数的互化", "分数的基本性质定理"],
-                    "约分与通分": ["最简分数的概念", "约分的方法与书写规范", "通分找公分母的方法", "异分母分数的大小比较"]
-                },
-                "第五单元 分数加法和减法": {
-                    "加减运算法则": ["同分母分数加减法", "异分母分数加减法(先通分)", "结果化为最简分数"],
-                    "分数加减混合运算": ["不带括号的加减混合顺序", "带括号的混合运算", "整数加法运算律推广到分数"]
-                },
-                "第六单元 圆": {
-                    "圆的认识": ["圆心、半径(r)、直径(d)的概念", "圆规画圆规范", "直径与半径的关系(d=2r)"],
-                    "圆的周长与面积": ["圆周率π的意义与近似值", "圆的周长公式(C=πd 或 C=2πr)", "圆的面积公式推导与应用(S=πr²)", "半圆的周长与面积计算"]
-                },
-                "第七单元 解决问题的策略": {
-                    "转化策略": ["图形转化(平移/旋转拼接)", "复杂算式转化为简单算式", "数形结合思想解决分式累加"]
+                    "分数的意义": [
+                        "概念：把_单位“1”_平均分成若干份，表示这样的一份或几份的数",
+                        "概念：分子比分母_小_的分数叫真分数(<1)；分子_大于或等于_分母的叫假分数(≥1)",
+                        "计算：假分数化带分数 -> _分子÷分母_，商作整数部分，余数作分子",
+                        "【经典题型】把3米长的绳子平均分成5段，每段占全长的几分之几？每段长多少米？"
+                    ],
+                    "分数的基本性质": [
+                        "公式：分数的分子和分母同时_乘或除以相同的数(0除外)_，分数的大小不变",
+                        "计算：约分 -> 分子和分母同时除以它们的_最大公因数_",
+                        "计算：通分 -> 找各分母的_最小公倍数_作为公分母进行转化",
+                        "【经典题型】比较 5/8 和 7/12 的大小(要求写出通分过程)。"
+                    ]
                 }
             },
             "英语": {
-                "Unit 1 Cinderella": {
-                    "词汇 Vocabulary": ["prince (王子)", "fairy (仙女)", "why (为什么)", "because (因为)", "clothes (衣服)", "let (让)", "put on (穿上)", "before (在...以前)", "have to (不得不)", "try on (试穿)", "fit (合适)", "mushroom (蘑菇)", "late (迟的)", "pick (摘)", "understand (明白)", "take off (脱下)"],
-                    "语法 Grammar": ["Why... 因为... (Because...) 问答句型", "have to 的用法与动词原形", "put on vs take off 反义词组", "主语为第三人称单数时动词加-s/-es"],
-                    "语音 Sound": ["dr 发音 (draw, dress, drink, driver)"]
+                "Unit 1 Cinderella (灰姑娘)": {
+                    "词汇 (Vocabulary)": [
+                        "prince (王子)", "fairy (仙女)", "why (为什么)", "because (因为)", "clothes (衣服)", 
+                        "let (让)", "put on (穿上)", "before (在……以前)", "have to (不得不，必须)", "try on (试穿)", 
+                        "fit (合适，合身)", "take off (脱下)", "mushroom (蘑菇)", "late (迟的，晚的)", 
+                        "pick (摘，拾)", "understand (明白，理解)", "be bad for (有害的)", "leave…behind (留下，丢下)"
+                    ],
+                    "语法与句型 (Grammar)": ["Why/Because 句型应用", "疑问代词的转换", "动词过去式基础规则"]
                 },
-                "Unit 2 How do you come to school?": {
-                    "词汇 Vocabulary": ["ship (轮船)", "train (火车)", "metro (地铁)", "taxi (出租车)", "bike (自行车)", "plane (飞机)", "walk (步行)", "live (居住)", "far from (离...远)", "near (在...附近)", "by (乘/坐)"],
-                    "语法 Grammar": ["How do you come to...? 提问交通方式", "by + 交通工具 vs on foot", "频度副词 (usually, sometimes, often)"],
-                    "语音 Sound": ["tr 发音 (tree, train, trousers, traffic)"]
+                "Unit 2 How do you come to school? (你怎么来学校？)": {
+                    "词汇 (Vocabulary)": [
+                        "far from (离……远)", "moon (月亮)", "street (街道)", "near (在……附近)", "city (城市)", 
+                        "by (乘……)", "bus (公共汽车)", "on foot (步行)", "metro (地铁)", "taxi (出租车)", 
+                        "bike (自行车)", "plane (飞机)", "ship (轮船)", "train (火车)", "ride (骑车)", 
+                        "young (年幼的)", "basket (篮子)"
+                    ],
+                    "语法与句型 (Grammar)": ["How提问交通方式", "频度副词用法 (usually, sometimes)"]
                 },
-                "Unit 3 Asking the way": {
-                    "词汇 Vocabulary": ["ask the way (问路)", "get to (到达)", "along (沿着)", "turn right (右转)", "turn left (左转)", "traffic light (红绿灯)", "street (街道)", "cinema (电影院)", "hospital (医院)", "shop (商店)", "zoo (动物园)", "next to (在...旁边)"],
-                    "语法 Grammar": ["How can I get to...? 问路句型", "Go along this street. 祈使句指路", "方位介词 (on your right/left)"],
-                    "语音 Sound": ["sh 发音 (shoe, shop, fish, ship)"]
+                "Unit 3 Asking the way (问路)": {
+                    "词汇 (Vocabulary)": [
+                        "ask the way (问路)", "get to (到达)", "take (搭乘)", "get on (上车)", "station (车站)", 
+                        "get off (下车)", "walk (走，步行)", "bookshop (书店)", "next to (在……旁边)", "sun (太阳)", 
+                        "ask…for help (向……求助)", "excuse me (劳驾，对不起)", "along (沿着)", "turn right (向右转)", 
+                        "traffic light (交通灯)", "on your right (在你的右侧)", "cinema (电影院)", "hospital (医院)", 
+                        "shop (商店)", "zoo (动物园)", "turn left (向左转)", "supermarket (超市)", "film (电影)", 
+                        "stop (车站)", "full (满的)"
+                    ],
+                    "语法与句型 (Grammar)": ["问路句型(How can I get to...)", "方位介词(next to, behind)"]
                 },
-                "Unit 4 Seeing the doctor": {
-                    "词汇 Vocabulary": ["doctor (医生)", "toothache (牙痛)", "headache (头痛)", "fever (发烧)", "cold (感冒)", "cough (咳嗽)", "check (检查)", "should (应该)", "rest (休息)", "take medicine (吃药)", "drink water (喝水)"],
-                    "语法 Grammar": ["What's wrong with you? 询问病情", "I have a... (headache/fever)", "You should / shouldn't... 提建议"],
-                    "语音 Sound": ["ch 发音 (chair, chicken, lunch, teacher)"]
+                "Unit 4 Seeing the doctor (看医生)": {
+                    "词汇 (Vocabulary)": [
+                        "see the doctor (看医生，看病)", "feel (感觉，感到)", "check (检查)", "have a rest (休息)", 
+                        "take medicine (吃药)", "drink water (喝水)", "toothache (牙疼)", "dentist (牙医)", 
+                        "anything (任何东西)", "brush one’s teeth (刷牙)", "bedtime (就寝时间)", "giraffe (长颈鹿)", 
+                        "point at (指着，指向)", "neck (脖子)"
+                    ],
+                    "语法与句型 (Grammar)": ["What's wrong with you?句型", "should / should not 的用法"]
                 },
-                "Unit 5 Helping our parents": {
-                    "词汇 Vocabulary": ["parent (父母)", "clean (打扫)", "cook (烹饪)", "sweep the floor (扫地)", "wash the dishes (洗碗)", "make the bed (整理床铺)", "wash clothes (洗衣服)", "busy (忙碌的)", "morning (早晨)"],
-                    "语法 Grammar": ["现在进行时 (be + doing)", "What are you doing? I am...", "What is he/she doing? He/She is..."],
-                    "语音 Sound": ["ing 发音 (sing, morning, evening, reading)"]
+                "Unit 5 Helping our parents (帮助我们的父母)": {
+                    "词汇 (Vocabulary)": [
+                        "parent (父亲；母亲；家长)", "clean (打扫；把……弄干净)", "cook (做(饭)，烧(菜))", 
+                        "sweep the floor (扫地)", "busy (忙于；忙的)", "wash the dishes (洗碗)", "make the bed (整理床铺)", 
+                        "grow (种植；生长)", "garden (花园；菜园)", "sweet (甜的)", "pest (害虫)", "ladybird (瓢虫)", 
+                        "go away (走了，离开)"
+                    ],
+                    "语法与句型 (Grammar)": ["现在进行时 (be + doing)", "What are you doing?句型"]
                 },
-                "Unit 6 In the kitchen": {
-                    "词汇 Vocabulary": ["kitchen (厨房)", "meat (肉)", "vegetable (蔬菜)", "potato (土豆/复数potatoes)", "tomato (西红柿/复数tomatoes)", "bread (面包)", "soup (汤)", "cook (厨师/烹饪)", "angry (生气的)", "smell (闻)"],
-                    "语法 Grammar": ["There is/are... in the kitchen.", "Are there any...? Yes, there are / No, there aren't", "可数名词复数规则 (potato -> potatoes)"],
-                    "语音 Sound": ["qu 发音 (queen, quick, quiet, question)"]
+                "Unit 6 In the kitchen (在厨房)": {
+                    "词汇 (Vocabulary)": [
+                        "game (游戏；比赛)", "smell (闻起来)", "meat (肉)", "potato (马铃薯，土豆)", "tomato (西红柿)", 
+                        "soup (汤)", "vegetable (蔬菜)", "cook (厨师)", "look for (寻找)", "find (找到)", "juice (果汁)"
+                    ],
+                    "语法与句型 (Grammar)": ["Are you / Is he... doing? 句型", "There be 句型的现在进行时"]
                 },
-                "Unit 7 Chinese festivals": {
-                    "词汇 Vocabulary": ["festival (节日)", "Spring Festival (春节)", "Dragon Boat Festival (端午节)", "Mid-Autumn Festival (中秋节)", "Double Ninth Festival (重阳节)", "dumpling (饺子)", "mooncake (月饼)", "rice dumpling (粽子)", "race (比赛)", "mountain (山)"],
-                    "语法 Grammar": ["It is in... (月份/季节介词用法)", "People usually... 描述节日习俗", "What do people do at...? 提问节日活动"],
-                    "语音 Sound": ["th 发音-清辅音 (three, thin, thank, month)"]
+                "Unit 7 Chinese festivals (中国节日)": {
+                    "词汇 (Vocabulary)": [
+                        "festival (节日)", "Spring Festival (春节)", "January (一月)", "February (二月)", "call (称作)", 
+                        "dumpling (饺子)", "Dragon Boat Festival (端午节)", "May (五月)", "June (六月)", "boat (船)", 
+                        "rice cake (年糕)", "Mid-Autumn Festival (中秋节)", "September (九月)", "October (十月)", 
+                        "mooncake (月饼)", "Double Ninth Festival (重阳节)", "November (十一月)", "old (老的)", "mountain (山)"
+                    ],
+                    "语法与句型 (Grammar)": ["介词 in / at / on 在节日和月份前的用法", "1-12月份词汇拓展"]
                 },
-                "Unit 8 Birthdays": {
-                    "词汇 Vocabulary": ["birthday (生日)", "January (一月)", "February (二月)", "March (三月)", "April (四月)", "May (五月)", "June (六月)", "July (七月)", "August (八月)", "September (九月)", "October (十月)", "November (十一月)", "December (十二月)", "party (派对)"],
-                    "语法 Grammar": ["When is your birthday?", "It's on the... of... (日期表达,序数词)", "序数词规则 (first, second, third... th)"],
-                    "语音 Sound": ["th 发音-浊辅音 (this, that, brother, they)"]
+                "Unit 8 Birthdays (生日)": {
+                    "词汇 (Vocabulary)": [
+                        "birthday (生日)", "eleventh (第十一)", "eighth (第八)", "March (三月)", "April (四月)", 
+                        "May (五月)", "June (六月)", "July (七月)", "August (八月)", "September (九月)", 
+                        "October (十月)", "November (十一月)", "December (十二月)", "party (聚会)", "when (什么时候)", 
+                        "wear (穿)", "favourite (最喜欢的)"
+                    ],
+                    "语法与句型 (Grammar)": ["When is your birthday?", "序数词规则与运用"]
                 }
             }
         };
@@ -207,6 +284,9 @@
             const [isEditingName, setIsEditingName] = useState(false);
             const [editNameText, setEditNameText] = useState('');
             const [toastMsg, setToastMsg] = useState(null);
+            
+            // 笔记折叠状态 (新)
+            const [showNotes, setShowNotes] = useState(false);
 
             // 格式刷状态
             const [isFormatPainterActive, setIsFormatPainterActive] = useState(false);
@@ -335,7 +415,13 @@
                 const newPath = [...navPath, nodeName];
                 setNavPath(newPath);
                 setViewLevel(viewLevel + 1);
-                setMobileTab('view'); // 深入层级时，切回视图
+                
+                // 移动端优化：如果进入了最底层的"具体考点"(Level 4)，自动切换到右侧操作面板
+                if (viewLevel + 1 >= 4) {
+                    setMobileTab('panel');
+                } else {
+                    setMobileTab('view'); 
+                }
             };
 
             // --- 保存与操作 ---
@@ -477,6 +563,9 @@
                          const mObj = masteryOptions.find(o => o.id === node.mastery);
                          if(mObj) displayTitle = `[${mObj.tag}] ` + displayTitle;
                     }
+                    // 清理导出文本中的 _关键词_ 标记符号
+                    displayTitle = displayTitle.replace(/_/g, '');
+                    
                     let xml = `\n<outline text="${escapeXML(displayTitle)}" _note="${escapeXML(node.note)}">`;
                     if(node.note) xml += `\n  <outline text="${escapeXML('📝 ' + node.note.replace(/\n/g, ' '))}" />`; 
                     node.children.forEach(c => { xml += buildOPMLNode(c); });
@@ -664,7 +753,7 @@
                     if (isFormatPainterActive) {
                         if (!painterSourcePath) {
                             setPainterSourcePath(key);
-                            showToast(`已复制考点 "${tp}" 的掌握状态，点击其他考点即可粘贴。`);
+                            showToast(`已复制考点的掌握状态，点击其他考点即可粘贴。`);
                         } else {
                             // 粘贴
                             const srcColor = masteryColors[painterSourcePath] || 'default';
@@ -679,7 +768,7 @@
                 };
 
                 return (
-                    <div className="flex flex-col h-full justify-start pb-4">
+                    <div className="flex flex-col h-full justify-start pb-4 overflow-y-auto no-scrollbar">
                         <div className="bg-white p-4 md:p-6 rounded-2xl border border-slate-100 shadow-sm w-full relative">
                             
                             {/* 格式刷操作栏 */}
@@ -709,7 +798,7 @@
                                 </div>
                             </div>
 
-                            {/* 优化后的高密度网格布局，适配短词汇与拼音 */}
+                            {/* 高密度网格布局 */}
                             <div className={`grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 md:gap-3 ${isFormatPainterActive && painterSourcePath ? 'cursor-crosshair' : ''}`}>
                                 {testPoints.map((tp, idx) => {
                                     const pathArr = [...navPath, tp];
@@ -739,7 +828,8 @@
                                              onClick={(e) => { e.stopPropagation(); handlePointClick(tp, key); }}
                                              className={`flex flex-col justify-between rounded-xl border-2 transition-all hover:scale-[1.05] cursor-pointer overflow-hidden min-h-[60px] p-2 md:p-3 ${bgClass} ${sourceRingClass}`}>
                                             <div className="flex flex-col justify-between items-start gap-1 mb-1">
-                                                <span className="text-xs md:text-sm font-bold leading-tight break-all">{tp}</span>
+                                                {/* 富文本渲染入口 */}
+                                                <span className="text-xs md:text-sm font-bold leading-tight break-all" dangerouslySetInnerHTML={renderRichText(tp)}></span>
                                                 <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-black tracking-widest shrink-0 self-end ${colorId !== 'default' ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-500'}`}>
                                                     {tagText}
                                                 </span>
@@ -754,13 +844,12 @@
                 );
             };
 
-            // 4: 渲染具体考点视图 (原单时段大字视图)
+            // 4: 渲染具体考点视图
             const renderTestPointDetail = () => {
                 const tpName = navPath[3];
                 return (
                     <div className="flex flex-col items-center justify-center h-full p-6 text-center">
-                        <div className="text-4xl md:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-br from-blue-700 to-indigo-900 leading-tight drop-shadow-sm mb-6 max-w-2xl">
-                            {tpName}
+                        <div className="text-2xl md:text-4xl font-black text-transparent bg-clip-text bg-gradient-to-br from-blue-700 to-indigo-900 leading-tight drop-shadow-sm mb-6 max-w-2xl" dangerouslySetInnerHTML={renderRichText(tpName)}>
                         </div>
                         <div className="text-lg md:text-xl font-extrabold text-blue-600 bg-blue-50 px-6 py-3 rounded-2xl border border-blue-100 shadow-sm flex items-center gap-2">
                             <TargetIcon className="w-6 h-6"/> 考点突破中
@@ -800,7 +889,7 @@
                             <h1 className="text-2xl md:text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-700 to-emerald-600 tracking-tight flex items-center drop-shadow-sm">
                                 Edu助力萌学
                                 <span className="text-[10px] md:text-xs font-bold text-white bg-gradient-to-r from-blue-500 to-emerald-500 px-2 py-0.5 rounded-full ml-2 shadow-md">
-                                    v3.0
+                                    v4.0
                                 </span>
                             </h1>
                         </div>
@@ -869,11 +958,16 @@
 
                         {/* 右侧：绑定输入与高级操作 */}
                         <div className={`w-full md:w-[32%] bg-white rounded-2xl md:rounded-none shadow-sm md:shadow-none p-4 md:p-6 flex-col h-full overflow-y-auto no-scrollbar relative z-10 ${mobileTab === 'panel' ? 'flex' : 'hidden md:flex'}`}>
-                            <div className="mb-4 shrink-0">
-                                <h3 className="text-xs font-bold text-blue-500 uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span> 当前聚焦：{activeInfo.prefix}
-                                </h3>
-                                <p className="text-lg md:text-xl font-black text-slate-800 border-b border-slate-100 pb-3 leading-snug"> {activeInfo.title} </p>
+                            
+                            {/* 优化后的当前聚焦头部 (缩小篇幅) */}
+                            <div className="mb-4 shrink-0 border-b border-slate-100 pb-3">
+                                <div className="flex items-center gap-2 mb-1">
+                                    <span className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-blue-500 animate-pulse"></span>
+                                    <h3 className="text-[10px] md:text-xs font-bold text-slate-500 uppercase tracking-widest">
+                                        当前聚焦：{activeInfo.prefix}
+                                    </h3>
+                                </div>
+                                <p className="text-base md:text-xl font-black text-slate-800 leading-snug" dangerouslySetInnerHTML={renderRichText(activeInfo.title)}></p>
                             </div>
 
                             {/* 考点层级特有的学情掌握度评估 */}
@@ -898,9 +992,22 @@
                                 </div>
                             )}
 
-                            <div className="flex-grow flex flex-col min-h-[150px]">
-                                <label className="text-xs md:text-sm font-bold text-slate-600 mb-2 flex items-center gap-1.5">📝 易错记录与扩展笔记</label>
-                                <textarea value={currentNoteText} onChange={(e) => setCurrentNoteText(e.target.value)} placeholder={`在此处记录关于 ${activeInfo.title} 的典型例题、易错点或心得...`} className="flex-grow w-full resize-none rounded-2xl border-2 border-slate-100 p-3 md:p-4 text-sm md:text-base focus:ring-0 focus:border-blue-400 outline-none bg-white text-slate-700 transition-all leading-relaxed shadow-inner"></textarea>
+                            <div className="flex-grow flex flex-col min-h-[60px] transition-all">
+                                <button 
+                                    onClick={() => setShowNotes(!showNotes)} 
+                                    className="flex items-center justify-between w-full bg-slate-50 hover:bg-slate-100 border border-slate-100 px-3 py-2.5 rounded-xl transition-colors mb-2"
+                                >
+                                    <span className="text-xs md:text-sm font-bold text-slate-600 flex items-center gap-1.5">📝 添加/查看扩展笔记</span>
+                                    {showNotes ? <ChevronUp className="w-4 h-4 text-slate-400"/> : <ChevronDown className="w-4 h-4 text-slate-400"/>}
+                                </button>
+                                {showNotes && (
+                                    <textarea 
+                                        value={currentNoteText} 
+                                        onChange={(e) => setCurrentNoteText(e.target.value)} 
+                                        placeholder={`在此处记录关于该考点的典型例题、易错点或心得...`} 
+                                        className="flex-grow w-full resize-none rounded-xl border-2 border-slate-100 p-3 md:p-4 text-sm md:text-base focus:ring-0 focus:border-blue-400 outline-none bg-white text-slate-700 transition-all leading-relaxed shadow-inner"
+                                    ></textarea>
+                                )}
                             </div>
 
                             {/* 操作中心 */}
