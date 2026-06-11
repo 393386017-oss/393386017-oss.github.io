@@ -26,6 +26,7 @@
     2) 画布新增移动端专属事件监听，支持单指触摸滑动平移画布、双指捏合缩放（Pinch-to-Zoom）。
     3) 新建或载入导图时自动计算容器视口，智能居中对齐当前所有内容，手机打开不迷失。
     4) 新增右侧悬浮触屏操控台（包含放大、缩小、一键居中复位），单手掌控全局。
+  v3.0-Heal: 解决并优化了导入 JSON 数据时，由于数据格式微小冲突导致 React 渲染层崩溃致使页面全白屏的问题，统一状态同步更新入口。
   ========================================================================================
 -->
 <head>
@@ -180,8 +181,26 @@
         const LEVEL_GAP = 240;
         const SIBLING_GAP = 24;
 
+        const measureTextHeight = (text) => {
+            const el = document.getElementById('measure-container');
+            if (!el) return MIN_NODE_HEIGHT;
+            el.innerText = text || " ";
+            return Math.max(MIN_NODE_HEIGHT, el.offsetHeight + 18);
+        };
+
+        // --- 核心自愈与安全过滤函数（全面自愈，防止各类脏数据崩溃） ---
         const sanitizeData = (rawJson) => {
-            if (!rawJson || typeof rawJson !== 'object') {
+            let cleanedJson = rawJson;
+            // 兼容处理最外层被包装为 Array 的结构 (部分第三方备份形式)
+            if (Array.isArray(cleanedJson)) {
+                cleanedJson = cleanedJson[0];
+            }
+            // 兼容处理把真实内容塞入 data 核心键的结构
+            if (cleanedJson && cleanedJson.data && typeof cleanedJson.data === 'object') {
+                cleanedJson = cleanedJson.data;
+            }
+
+            if (!cleanedJson || typeof cleanedJson !== 'object') {
                 return { id: 'root', text: '中心主题', children: [], collapsed: false, color: '#334155' };
             }
 
@@ -189,8 +208,12 @@
                 if (!node || typeof node !== 'object') {
                     return { id: `n_${Math.random().toString(36).substr(2, 9)}_${Date.now()}`, text: '新话题', children: [], collapsed: false, color: parentColor || '#334155' };
                 }
-                const id = node.id || `n_${Math.random().toString(36).substr(2, 9)}_${Date.now()}`;
-                const text = typeof node.text === 'string' ? node.text : '新话题';
+                
+                // 强制转为 String，防止在 ID 检索定位时发生 Type-Mismatch (如 number 和 string 混用)
+                const id = node.id ? String(node.id) : `n_${Math.random().toString(36).substr(2, 9)}_${Date.now()}`;
+                
+                // 强制将 text 转化为 String（如数字 123 转化为 "123"），确保 replace 等属性稳定可用
+                const text = node.text !== undefined && node.text !== null ? String(node.text) : '新话题';
                 const collapsed = !!node.collapsed;
                 
                 let color = node.color;
@@ -208,17 +231,17 @@
                 return { id, text, children, collapsed, color };
             };
 
-            const rootText = typeof rawJson.text === 'string' ? rawJson.text : '中心主题';
-            const rootCollapsed = !!rawJson.collapsed;
-            const rootColor = rawJson.color || '#334155';
-            const rootChildren = Array.isArray(rawJson.children) ? rawJson.children : [];
+            const rootText = cleanedJson.text !== undefined && cleanedJson.text !== null ? String(cleanedJson.text) : '中心主题';
+            const rootCollapsed = !!cleanedJson.collapsed;
+            const rootColor = cleanedJson.color || '#334155';
+            const rootChildren = Array.isArray(cleanedJson.children) ? cleanedJson.children : [];
             
             const sanitizedChildren = rootChildren.map((child, i) => 
                 sanitizeNode(child, null, true, i)
             );
 
             return {
-                id: 'root',
+                id: 'root', // 强制确立根节点 ID 为 root
                 text: rootText,
                 collapsed: rootCollapsed,
                 color: rootColor,
@@ -242,6 +265,7 @@
             const [folderSaveStatus, setFolderSaveStatus] = useState('未设置自动保存目录');
             const isLocalSaveSupported = typeof window.showDirectoryPicker !== "undefined";
 
+            // 统一的状态同步与历史安全管理路径 (解决导入和普通修改的并行时序问题)
             const setData = (newData, skipHistory = false) => {
                 setDataState(newData);
                 if (!skipHistory) {
@@ -398,9 +422,7 @@
                 const initialMap = {
                     id: 'root', text: '中心主题', children: [], collapsed: false, color: '#334155'
                 };
-                setDataState(initialMap);
-                setHistory([initialMap]);
-                setHistoryIndex(0);
+                setData(initialMap);
                 setSelectedId('root');
                 setEditingId(null);
                 localStorage.setItem('ithought_last_csv_save', Date.now().toString());
@@ -683,9 +705,7 @@
                         const importedData = { id: 'root', text: '导入的主题', children: roots, color: '#334155' };
                         
                         const sanitized = sanitizeData(importedData);
-                        setDataState(sanitized);
-                        setHistory([sanitized]);
-                        setHistoryIndex(0);
+                        setData(sanitized);
                         setSelectedId('root');
                         localStorage.setItem('ithought_last_csv_save', Date.now().toString());
                         setTimeout(handleFitView, 50);
@@ -703,12 +723,10 @@
                     try {
                         const json = JSON.parse(ev.target.result);
                         const sanitized = sanitizeData(json);
-                        setDataState(sanitized);
-                        setHistory([sanitized]);
-                        setHistoryIndex(0);
+                        setData(sanitized); // 统一状态，防止 history 丢包
                         setSelectedId('root');
                         localStorage.setItem('ithought_last_csv_save', Date.now().toString());
-                        setTimeout(handleFitView, 50);
+                        setTimeout(handleFitView, 50); // 导入后自动居中呈现
                     } catch(err) { setSaveStatus('无效的 JSON'); }
                 };
                 reader.readAsText(file);
@@ -804,16 +822,7 @@
                             <path key={`l-${child.id}`} d={`M ${nodePos.x + 90} ${nodePos.y} C ${nodePos.x + 150} ${nodePos.y}, ${child.x - 150} ${child.y}, ${child.x - 90} ${child.y}`} fill="none" stroke={child.color || '#cbd5e1'} strokeWidth="2.5" opacity="0.6" />
                         ))}
                         <g transform={`translate(${posX - 90}, ${posY - nodePos.height / 2})`} className={isDrag ? 'drag-ghost' : ''}>
-                            <rect 
-                                width={180} height={nodePos.height} rx="12" 
-                                fill={isS ? branchColor : '#ffffff'} 
-                                stroke={isS ? branchColor : (isTarget ? '#3b82f6' : branchColor)} 
-                                strokeWidth={isS ? 0 : 2} 
-                                className={`cursor-grab active:cursor-grabbing transition-all shadow-sm ${isTarget ? 'drop-target-hint' : ''}`} 
-                                onMouseDown={(e) => handleMouseDown(e, nodePos.id)} 
-                                onTouchStart={(e) => handleTouchStartNode(e, nodePos.id)}
-                                onDoubleClick={(e) => { e.stopPropagation(); setEditingId(nodePos.id); }} 
-                            />
+                            <rect width={180} height={nodePos.height} rx="12" fill={isS ? branchColor : '#ffffff'} stroke={isS ? branchColor : (isTarget ? '#3b82f6' : branchColor)} strokeWidth={isS ? 0 : 2} className={`cursor-grab active:cursor-grabbing transition-all shadow-sm ${isTarget ? 'drop-target-hint' : ''}`} onMouseDown={(e) => handleMouseDown(e, nodePos.id)} onTouchStart={(e) => handleTouchStartNode(e, nodePos.id)} onDoubleClick={(e) => { e.stopPropagation(); setEditingId(nodePos.id); }} />
                             <foreignObject width={180} height={nodePos.height} style={{ pointerEvents: isE ? 'auto' : 'none' }}>
                                 <div className="w-full h-full flex items-center justify-center p-2 text-center">
                                     {isE ? (
@@ -833,7 +842,7 @@
                 );
             };
 
-            // 键盘快捷键
+            // 键盘快捷键监听
             useEffect(() => {
                 const handleKeyDown = (e) => {
                     if (e.key === 'Escape') {
@@ -861,6 +870,7 @@
                 return (
                     <div className="flex flex-col h-screen w-screen items-center justify-center bg-slate-50 overflow-auto px-4 py-8">
                         <div className="max-w-2xl w-full text-center space-y-8">
+                            {/* Logo */}
                             <div className="flex flex-col items-center space-y-3">
                                 <div className="bg-slate-800 p-4 rounded-3xl text-white shadow-lg animate-pulse">
                                     <Icon name="settings" size={48} />
@@ -873,6 +883,7 @@
                                 </p>
                             </div>
 
+                            {/* 欢迎引导卡片组 */}
                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 text-left px-2">
                                 <div onClick={handleCreateNewMap} className="bg-white p-5 rounded-2xl border border-slate-200 hover:border-blue-500 shadow-sm hover:shadow-md cursor-pointer transition-all flex flex-col justify-between group">
                                     <div className="space-y-2">
@@ -904,12 +915,13 @@
                                             <Icon name="upload" size={24} />
                                         </div>
                                         <h3 className="font-bold text-base sm:text-lg text-slate-800">导入 JSON</h3>
-                                        <p className="text-[11px] sm:text-xs text-slate-400">载入以往通过本工具备份导出的 JSON 画图文件。</p>
+                                        <p className="text-[11px] sm:text-xs text-slate-400">载入以往通过本工具备份导出的 JSON 画画文件。</p>
                                     </div>
                                     <span className="text-indigo-600 font-semibold text-xs mt-4 inline-flex items-center gap-1 group-hover:translate-x-1 transition-transform">导入 JSON →</span>
                                 </label>
                             </div>
 
+                            {/* 本地文件夹自动保存设置 */}
                             <div className="bg-slate-100 p-4 rounded-2xl border flex flex-col sm:flex-row items-center justify-between gap-4 text-center sm:text-left mx-2">
                                 <div className="space-y-1">
                                     <p className="text-sm font-semibold text-slate-800">💡 推荐：配置默认自动保存本地目录</p>
@@ -1099,7 +1111,7 @@
         }
 
         const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
+        root.render(<App />); // 修正 React 挂载方式，恢复为 <App />
     </script>
 </body>
 </html>
