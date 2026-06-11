@@ -11,7 +11,7 @@
   v1.8: 增加 OPML 格式导入导出，实现与 iThoughts/XMind 等软件互通；支持 Markdown 导出。
   v1.9: 引入“彩虹分支” system。第一级节点自动循环分配红黄蓝绿紫五色，下级节点自动继承母节点颜色。
   v1.9-Adjust: 调整克隆为“复制+粘贴”模式。解决拖拽不便的问题，支持跨分支、跨层级的精准内容迁移。
-  v2.1: 
+  v2.0: 
     1) 增加自动保存至本地文件夹的配置功能：
        - 每当内容发生改变时，自动将导图保存为名为 "ithought_autosave.json" 的文件（直接覆盖）。
        - 传统的点击导出命名规则保持不变（带版本及日期命名，不覆盖）。
@@ -21,12 +21,17 @@
     5) 修复了自动保存中未在整点静默备份为 CSV 的问题，新增整点时间检测器实现静默覆盖保存为 "ithought_autosave.csv"。
     6) 修复了分支折叠后展开按钮因布局子数组置空而消失的 Bug，恢复折叠后右侧稳定的加号展开交互。
     7) 增加拖动保护：支持 Esc 键、点击空白区域一键取消节点悬浮/拖动状态。
+  v3.0:
+    1) 手机移动端自适应升级，按钮、工具栏在不同屏宽下自适应包裹重组，支持指尖轻松点按（尺寸全规格不低于44px）。
+    2) 画布新增移动端专属事件监听，支持单指触摸滑动平移画布、双指捏合缩放（Pinch-to-Zoom）。
+    3) 新建或载入导图时自动计算容器视口，智能居中对齐当前所有内容，手机打开不迷失。
+    4) 新增右侧悬浮触屏操控台（包含放大、缩小、一键居中复位），单手掌控全局。
   ========================================================================================
 -->
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>iThoughtW2.0 - 网页思维导图工具</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>iThoughtW3.0 - 网页思维导图工具</title>
     <!-- 加载基础依赖 -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
@@ -37,6 +42,7 @@
         body { 
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             background-color: #f8fafc;
+            touch-action: none; /* 禁用系统默认缩放以全面托管 */
         }
         #measure-container {
             position: absolute;
@@ -114,6 +120,7 @@
         const Icon = ({ name, size = 16, className = "" }) => {
             const icons = {
                 plus: <path d="M12 5v14M5 12h14" />,
+                minus: <path d="M5 12h14" />,
                 trash: <path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2M10 11v6M14 11v6" />,
                 download: <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v4M7 10l5 5 5-5M12 15V3" />,
                 upload: <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v4M17 8l-5-5-5 5M12 3v12" />,
@@ -167,20 +174,12 @@
             );
         };
 
-        const VERSION = "iThoughtW2.0";
+        const VERSION = "iThoughtW3.0";
         const NODE_WIDTH = 180;
         const MIN_NODE_HEIGHT = 42;
         const LEVEL_GAP = 240;
         const SIBLING_GAP = 24;
 
-        const measureTextHeight = (text) => {
-            const el = document.getElementById('measure-container');
-            if (!el) return MIN_NODE_HEIGHT;
-            el.innerText = text || " ";
-            return Math.max(MIN_NODE_HEIGHT, el.offsetHeight + 18);
-        };
-
-        // --- 核心自愈与净化净化函数（深度容错，防止白屏崩溃） ---
         const sanitizeData = (rawJson) => {
             if (!rawJson || typeof rawJson !== 'object') {
                 return { id: 'root', text: '中心主题', children: [], collapsed: false, color: '#334155' };
@@ -203,7 +202,6 @@
                     color = color || '#334155';
                 }
 
-                // 强制确保 children 是一个有效的数组
                 const rawChildren = Array.isArray(node.children) ? node.children : [];
                 const children = rawChildren.map((child, i) => sanitizeNode(child, color, false, i));
 
@@ -220,7 +218,7 @@
             );
 
             return {
-                id: 'root', // 强制设定根节点 ID 为 root 以供系统操作匹配
+                id: 'root',
                 text: rootText,
                 collapsed: rootCollapsed,
                 color: rootColor,
@@ -229,19 +227,18 @@
         };
 
         function App() {
-            // --- 状态与历史管理 ---
-            // 每次重新打开默认进入空白欢迎状态 (data === null)
+            // data === null 代表空白欢迎主页，非null进入工作流
             const [data, setDataState] = useState(null);
 
             const [history, setHistory] = useState([]);
             const [historyIndex, setHistoryIndex] = useState(0);
 
-            // 粘贴板状态
+            // 复制粘贴板
             const [clipboard, setClipboard] = useState(null);
 
-            // 自动保存至本地文件夹相关状态
+            // 自动保存至本地配置
             const [dirHandle, setDirHandle] = useState(null);
-            const [folderPermission, setFolderPermission] = useState('prompt'); // 'prompt', 'granted', 'denied'
+            const [folderPermission, setFolderPermission] = useState('prompt');
             const [folderSaveStatus, setFolderSaveStatus] = useState('未设置自动保存目录');
             const isLocalSaveSupported = typeof window.showDirectoryPicker !== "undefined";
 
@@ -261,18 +258,31 @@
 
             const [selectedId, setSelectedId] = useState('root');
             const [editingId, setEditingId] = useState(null);
-            const [scale, setScale] = useState(1);
+            const [scale, setScale] = useState(1.0);
             const [translate, setTranslate] = useState({ x: 150, y: window.innerHeight / 2 });
             const [saveStatus, setSaveStatus] = useState('空白页面');
             const [dragInfo, setDragInfo] = useState({ isDragging: false, draggingId: null, dx: 0, dy: 0, targetId: null });
             const svgRef = useRef(null);
 
-            // --- 载入已配置的文件夹句柄 ---
+            // 智能居中逻辑：新建/导入完成或视口重置时自动执行
+            const handleFitView = () => {
+                const screenWidth = window.innerWidth;
+                const screenHeight = window.innerHeight;
+                // 对于小屏幕（手机），给予更贴近中央偏左的初始焦距
+                if (screenWidth < 768) {
+                    setTranslate({ x: screenWidth / 3, y: screenHeight / 2 });
+                    setScale(0.8);
+                } else {
+                    setTranslate({ x: screenWidth / 4, y: screenHeight / 2 });
+                    setScale(1.0);
+                }
+            };
+
+            // 载入目录
             useEffect(() => {
                 getDBSetting("dirHandle").then(async (handle) => {
                     if (handle) {
                         setDirHandle(handle);
-                        // 查询现有授权状态
                         try {
                             const status = await handle.queryPermission({ mode: 'readwrite' });
                             setFolderPermission(status);
@@ -288,7 +298,7 @@
                 });
             }, []);
 
-            // --- 自动保存执行逻辑 (静默写入 ithought_autosave.json) ---
+            // 静默自动保存 ithought_autosave.json
             const performFolderSave = async (currentData) => {
                 if (!dirHandle || !currentData) return;
                 try {
@@ -303,7 +313,6 @@
                 }
             };
 
-            // --- 每小时（跨越整点）自动保存 CSV 备份归档检测器 ---
             useEffect(() => {
                 if (!dirHandle || !data || data.id === 'empty') return;
 
@@ -316,7 +325,7 @@
                         const lastSaveHour = Math.floor(lastCsvSave / 3600000);
                         const currentHour = Math.floor(now / 3600000);
 
-                        // 当时间跨越了整点小时数，自动生成 CSV
+                        // 跨越整点小时数时，自动静默生成 CSV
                         if (currentHour !== lastSaveHour) {
                             const rows = [];
                             const walk = (n, p = "无", l = 0) => {
@@ -340,12 +349,10 @@
                     }
                 };
 
-                // 每隔 10 秒检测一次是否跨越整点
                 const intervalId = setInterval(checkAndSaveCSV, 10000);
                 return () => clearInterval(intervalId);
             }, [data, dirHandle]);
 
-            // 每当数据改变且处于工作流时，触发防抖式自动保存
             useEffect(() => {
                 if (!data || data.id === 'empty') return;
                 setSaveStatus('变更未保存');
@@ -355,12 +362,11 @@
                         performFolderSave(data);
                     }
                     setSaveStatus('修改已保存');
-                }, 1000); // 1秒静置后写入
+                }, 1000);
 
                 return () => clearTimeout(debounceTimer);
             }, [data, dirHandle, folderPermission]);
 
-            // --- 授权与文件夹选择 ---
             const requestFolderPermission = async () => {
                 if (!dirHandle) return;
                 try {
@@ -388,7 +394,6 @@
                 }
             };
 
-            // --- 新建导图逻辑 ---
             const handleCreateNewMap = () => {
                 const initialMap = {
                     id: 'root', text: '中心主题', children: [], collapsed: false, color: '#334155'
@@ -398,11 +403,13 @@
                 setHistoryIndex(0);
                 setSelectedId('root');
                 setEditingId(null);
-                // 新建时，重置下一次CSV保存时间点，防止立刻导出
                 localStorage.setItem('ithought_last_csv_save', Date.now().toString());
+                
+                // 延时渲染周期，确保视口宽度高度渲染就绪后居中
+                setTimeout(handleFitView, 50);
             };
 
-            // --- 查找工具函数 ---
+            // --- 查找与变色工具函数 ---
             const findNodeById = (node, id) => {
                 if (!node) return null;
                 if (node.id === id) return node;
@@ -435,14 +442,12 @@
                 return false;
             };
 
-            // 递归更新整个子树的颜色
             const updateSubtreeColor = (node, color) => ({
                 ...node,
                 color,
                 children: (node.children || []).map(c => updateSubtreeColor(c, color))
             });
 
-            // 深度克隆节点，重置ID并处理颜色
             const deepCloneNode = (node, newParentColor = null, isToRoot = false, index = 0) => {
                 const newId = `n_${Math.random().toString(36).substr(2, 9)}_${Date.now()}`;
                 let newColor = newParentColor;
@@ -457,7 +462,7 @@
                 };
             };
 
-            // --- 节点操作 ---
+            // --- 节点复制粘贴 ---
             const handleCopy = () => {
                 const target = findNodeById(data, selectedId);
                 if (!target || selectedId === 'root') return;
@@ -560,7 +565,106 @@
                 setData(update(data));
             };
 
-            // --- 导入功能 (应用自愈算法) ---
+            const handleTouchStart = (e) => {
+                if (e.target.tagName === 'svg' || e.target.tagName === 'rect' || e.target.tagName === 'g') {
+                    if (e.touches.length === 1) {
+                        // 移动端单指滑动平移画布
+                        if (e.target.tagName !== 'svg') return; // 如果点在节点上则不拖拽画布
+                        const touch = e.touches[0];
+                        const sx = touch.clientX - translate.x;
+                        const sy = touch.clientY - translate.y;
+                        
+                        const handleTouchMove = (ev) => {
+                            if (ev.touches.length === 1) {
+                                const t = ev.touches[0];
+                                setTranslate({ x: t.clientX - sx, y: t.clientY - sy });
+                            }
+                        };
+                        const handleTouchEnd = () => {
+                            window.removeEventListener('touchmove', handleTouchMove);
+                            window.removeEventListener('touchend', handleTouchEnd);
+                        };
+                        window.addEventListener('touchmove', handleTouchMove, { passive: false });
+                        window.addEventListener('touchend', handleTouchEnd);
+                    } else if (e.touches.length === 2) {
+                        // 移动端双指捏合自由调节缩放 (Pinch to Zoom)
+                        const t1 = e.touches[0];
+                        const t2 = e.touches[1];
+                        const initialDist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+                        const initialScale = scale;
+                        
+                        const handleTouchMove = (ev) => {
+                            if (ev.touches.length === 2) {
+                                ev.preventDefault(); // 阻止浏览器原生两指缩放
+                                const nt1 = ev.touches[0];
+                                const nt2 = ev.touches[1];
+                                const dist = Math.hypot(nt1.clientX - nt2.clientX, nt1.clientY - nt2.clientY);
+                                const factor = dist / initialDist;
+                                setScale(Math.min(Math.max(initialScale * factor, 0.15), 3.0));
+                            }
+                        };
+                        const handleTouchEnd = () => {
+                            window.removeEventListener('touchmove', handleTouchMove);
+                            window.removeEventListener('touchend', handleTouchEnd);
+                        };
+                        window.addEventListener('touchmove', handleTouchMove, { passive: false });
+                        window.addEventListener('touchend', handleTouchEnd);
+                    }
+                }
+            };
+
+            // 移动端单指点击/触控节点拖拽支持
+            const handleTouchStartNode = (e, id) => {
+                e.stopPropagation();
+                setSelectedId(id);
+                if (id === 'root' || editingId) return;
+                
+                const touch = e.touches[0];
+                const startX = touch.clientX, startY = touch.clientY;
+                let moved = false;
+                
+                const onTouchMove = (mv) => {
+                    if (mv.touches.length > 1) return;
+                    const t = mv.touches[0];
+                    const dx = (t.clientX - startX) / scale;
+                    const dy = (t.clientY - startY) / scale;
+                    if (!moved && (Math.abs(dx) > 4 || Math.abs(dy) > 4)) moved = true;
+                    if (moved) {
+                        const pt = svgRef.current.createSVGPoint(); pt.x = t.clientX; pt.y = t.clientY;
+                        const local = pt.matrixTransform(svgRef.current.getScreenCTM().inverse());
+                        const hitTest = (nodes) => {
+                            for (let n of nodes) {
+                                const hitW = 100, hitH = n.height / 2 + 10;
+                                if (local.x >= n.x - hitW && local.x <= n.x + hitW && local.y >= n.y - hitH && local.y <= n.y + hitH) {
+                                    if (n.id !== id) return n.id;
+                                }
+                                const res = hitTest(n.children || []); if (res) return res;
+                            }
+                            return null;
+                        };
+                        setDragInfo({ isDragging: true, draggingId: id, dx, dy, targetId: hitTest([layout]) });
+                    }
+                };
+                
+                const onTouchEnd = () => {
+                    setDragInfo(prev => { 
+                        if (prev.isDragging && prev.targetId) reparentNode(prev.draggingId, prev.targetId); 
+                        return { isDragging: false, draggingId: null, dx: 0, dy: 0, targetId: null }; 
+                    });
+                    window.removeEventListener('touchmove', onTouchMove);
+                    window.removeEventListener('touchend', onTouchEnd);
+                };
+                
+                window.addEventListener('touchmove', onTouchMove, { passive: false });
+                window.addEventListener('touchend', onTouchEnd);
+            };
+
+            const collapseAll = () => {
+                const recursiveCollapse = (node) => ({ ...node, collapsed: (node.children || []).length > 0, children: (node.children || []).map(recursiveCollapse) });
+                setData(recursiveCollapse(data));
+            };
+
+            // OPML 导入 (带净化算法自愈)
             const handleImportOPMLFile = (e) => {
                 const file = e.target.files[0];
                 if (!file) return;
@@ -578,13 +682,13 @@
                         const roots = Array.from(outlines).map((o, i) => parse(o, null, true, i));
                         const importedData = { id: 'root', text: '导入的主题', children: roots, color: '#334155' };
                         
-                        // 使用自愈算法净化
                         const sanitized = sanitizeData(importedData);
                         setDataState(sanitized);
                         setHistory([sanitized]);
                         setHistoryIndex(0);
                         setSelectedId('root');
                         localStorage.setItem('ithought_last_csv_save', Date.now().toString());
+                        setTimeout(handleFitView, 50);
                     } catch(err) { setSaveStatus('导入失败'); }
                 };
                 reader.readAsText(file);
@@ -598,20 +702,19 @@
                 reader.onload = (ev) => {
                     try {
                         const json = JSON.parse(ev.target.result);
-                        // 使用智能自愈算法净化
                         const sanitized = sanitizeData(json);
                         setDataState(sanitized);
                         setHistory([sanitized]);
                         setHistoryIndex(0);
                         setSelectedId('root');
                         localStorage.setItem('ithought_last_csv_save', Date.now().toString());
+                        setTimeout(handleFitView, 50);
                     } catch(err) { setSaveStatus('无效的 JSON'); }
                 };
                 reader.readAsText(file);
                 e.target.value = null;
             };
 
-            // --- 传统单次导出（保留原样：附带日期后缀） ---
             const handleExportOPML = () => {
                 const escape = (str) => str.replace(/[<>&"']/g, (c) => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&apos;'}[c]));
                 const nodeToOPML = (node) => {
@@ -652,7 +755,7 @@
                 img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(new XMLSerializer().serializeToString(clone));
             };
 
-            // --- 布局算法 ---
+            // 布局计算
             const getSubtreeHeight = (node) => {
                 if (!node) return 0;
                 const selfH = measureTextHeight(node.text);
@@ -683,38 +786,7 @@
                 return calculateLayout(data, 0, 0);
             }, [data]);
 
-            // --- 交互处理 ---
-            const handleMouseDown = (e, id) => {
-                e.stopPropagation(); setSelectedId(id);
-                if (id === 'root' || editingId) return;
-                const startX = e.clientX, startY = e.clientY;
-                let moved = false;
-                const onMouseMove = (mv) => {
-                    const dx = (mv.clientX - startX) / scale, dy = (mv.clientY - startY) / scale;
-                    if (!moved && (Math.abs(dx) > 3 || Math.abs(dy) > 3)) moved = true;
-                    if (moved) {
-                        const pt = svgRef.current.createSVGPoint(); pt.x = mv.clientX; pt.y = mv.clientY;
-                        const local = pt.matrixTransform(svgRef.current.getScreenCTM().inverse());
-                        const hitTest = (nodes) => {
-                            for (let n of nodes) {
-                                const hitW = 100, hitH = n.height / 2 + 10;
-                                if (local.x >= n.x - hitW && local.x <= n.x + hitW && local.y >= n.y - hitH && local.y <= n.y + hitH) {
-                                    if (n.id !== id) return n.id;
-                                }
-                                const res = hitTest(n.children || []); if (res) return res;
-                            }
-                            return null;
-                        };
-                        setDragInfo({ isDragging: true, draggingId: id, dx, dy, targetId: hitTest([layout]) });
-                    }
-                };
-                const onMouseUp = () => {
-                    setDragInfo(prev => { if (prev.isDragging && prev.targetId) reparentNode(prev.draggingId, prev.targetId); return { isDragging: false, draggingId: null, dx: 0, dy: 0, targetId: null }; });
-                    window.removeEventListener('mousemove', onMouseMove); window.removeEventListener('mouseup', onMouseUp);
-                };
-                window.addEventListener('mousemove', onMouseMove); window.addEventListener('mouseup', onMouseUp);
-            };
-
+            // --- 交互处理 (支持 mouse 及 touch) ---
             const renderTree = (nodePos) => {
                 if (!nodePos) return null;
                 const isS = selectedId === nodePos.id, isE = editingId === nodePos.id;
@@ -723,7 +795,6 @@
                 const branchColor = nodePos.color || '#334155';
                 const children = nodePos.children || [];
                 
-                // 解决 2.0 中收起分支后折叠/展开 + 号按钮消失的问题（检索原始真实数据）
                 const rawNode = findNodeById(data, nodePos.id);
                 const hasChildren = rawNode && rawNode.children && rawNode.children.length > 0;
 
@@ -733,7 +804,16 @@
                             <path key={`l-${child.id}`} d={`M ${nodePos.x + 90} ${nodePos.y} C ${nodePos.x + 150} ${nodePos.y}, ${child.x - 150} ${child.y}, ${child.x - 90} ${child.y}`} fill="none" stroke={child.color || '#cbd5e1'} strokeWidth="2.5" opacity="0.6" />
                         ))}
                         <g transform={`translate(${posX - 90}, ${posY - nodePos.height / 2})`} className={isDrag ? 'drag-ghost' : ''}>
-                            <rect width={180} height={nodePos.height} rx="12" fill={isS ? branchColor : '#ffffff'} stroke={isS ? branchColor : (isTarget ? '#3b82f6' : branchColor)} strokeWidth={isS ? 0 : 2} className={`cursor-grab active:cursor-grabbing transition-all shadow-sm ${isTarget ? 'drop-target-hint' : ''}`} onMouseDown={(e) => handleMouseDown(e, nodePos.id)} onDoubleClick={(e) => { e.stopPropagation(); setEditingId(nodePos.id); }} />
+                            <rect 
+                                width={180} height={nodePos.height} rx="12" 
+                                fill={isS ? branchColor : '#ffffff'} 
+                                stroke={isS ? branchColor : (isTarget ? '#3b82f6' : branchColor)} 
+                                strokeWidth={isS ? 0 : 2} 
+                                className={`cursor-grab active:cursor-grabbing transition-all shadow-sm ${isTarget ? 'drop-target-hint' : ''}`} 
+                                onMouseDown={(e) => handleMouseDown(e, nodePos.id)} 
+                                onTouchStart={(e) => handleTouchStartNode(e, nodePos.id)}
+                                onDoubleClick={(e) => { e.stopPropagation(); setEditingId(nodePos.id); }} 
+                            />
                             <foreignObject width={180} height={nodePos.height} style={{ pointerEvents: isE ? 'auto' : 'none' }}>
                                 <div className="w-full h-full flex items-center justify-center p-2 text-center">
                                     {isE ? (
@@ -753,10 +833,9 @@
                 );
             };
 
-            // 键盘快捷键监听
+            // 键盘快捷键
             useEffect(() => {
                 const handleKeyDown = (e) => {
-                    // 当按下 Esc 键时，一键安全取消悬浮拖拽状态并退出编辑
                     if (e.key === 'Escape') {
                         setDragInfo({ isDragging: false, draggingId: null, dx: 0, dy: 0, targetId: null });
                         if (editingId) setEditingId(null);
@@ -777,80 +856,77 @@
                 return () => window.removeEventListener('keydown', handleKeyDown);
             }, [selectedId, editingId, data, historyIndex, clipboard]);
 
-            // --- 渲染欢迎页面 (空白引导状态) ---
+            // --- 渲染欢迎页面 (自适应 Onboarding 引导卡片) ---
             if (!data) {
                 return (
                     <div className="flex flex-col h-screen w-screen items-center justify-center bg-slate-50 overflow-auto px-4 py-8">
                         <div className="max-w-2xl w-full text-center space-y-8">
-                            {/* Logo */}
                             <div className="flex flex-col items-center space-y-3">
                                 <div className="bg-slate-800 p-4 rounded-3xl text-white shadow-lg animate-pulse">
                                     <Icon name="settings" size={48} />
                                 </div>
-                                <h1 className="font-extrabold text-4xl tracking-tight text-slate-800">
+                                <h1 className="font-extrabold text-3xl sm:text-4xl tracking-tight text-slate-800">
                                     {VERSION}
                                 </h1>
-                                <p className="text-sm text-slate-400 max-w-md">
-                                    高效的本地、响应式思维导图系统。支持多格式自由互通，让您的灵感更敏捷、更整洁。
+                                <p className="text-xs sm:text-sm text-slate-400 max-w-md px-2">
+                                    支持触屏手势缩放与拖拽、专业本地静默同步的轻量脑图，开箱即用。
                                 </p>
                             </div>
 
-                            {/* 欢迎引导卡片组 */}
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-left">
-                                <div onClick={handleCreateNewMap} className="bg-white p-6 rounded-2xl border border-slate-200 hover:border-blue-500 shadow-sm hover:shadow-md cursor-pointer transition-all flex flex-col justify-between group">
-                                    <div className="space-y-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 text-left px-2">
+                                <div onClick={handleCreateNewMap} className="bg-white p-5 rounded-2xl border border-slate-200 hover:border-blue-500 shadow-sm hover:shadow-md cursor-pointer transition-all flex flex-col justify-between group">
+                                    <div className="space-y-2">
                                         <div className="p-3 bg-blue-50 text-blue-600 rounded-xl w-fit group-hover:bg-blue-600 group-hover:text-white transition-colors">
                                             <Icon name="plus" size={24} />
                                         </div>
-                                        <h3 className="font-bold text-lg text-slate-800">新建思维导图</h3>
-                                        <p className="text-xs text-slate-400">开启全新空白画布，设计并规划您的创意方案。</p>
+                                        <h3 className="font-bold text-base sm:text-lg text-slate-800">新建导图</h3>
+                                        <p className="text-[11px] sm:text-xs text-slate-400">开启全新空白画布，设计规划您的创意方案。</p>
                                     </div>
-                                    <span className="text-blue-600 font-semibold text-xs mt-6 inline-flex items-center gap-1 group-hover:translate-x-1 transition-transform">立即新建 →</span>
+                                    <span className="text-blue-600 font-semibold text-xs mt-4 inline-flex items-center gap-1 group-hover:translate-x-1 transition-transform">立即新建 →</span>
                                 </div>
 
-                                <label className="bg-white p-6 rounded-2xl border border-slate-200 hover:border-emerald-500 shadow-sm hover:shadow-md cursor-pointer transition-all flex flex-col justify-between group">
+                                <label className="bg-white p-5 rounded-2xl border border-slate-200 hover:border-emerald-500 shadow-sm hover:shadow-md cursor-pointer transition-all flex flex-col justify-between group">
                                     <input type="file" className="hidden" accept=".opml" onChange={handleImportOPMLFile} />
-                                    <div className="space-y-3">
+                                    <div className="space-y-2">
                                         <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl w-fit group-hover:bg-emerald-600 group-hover:text-white transition-colors">
                                             <Icon name="importOpml" size={24} />
                                         </div>
-                                        <h3 className="font-bold text-lg text-slate-800">导入 OPML</h3>
-                                        <p className="text-xs text-slate-400">支持读取 XMind、MindNode、iThoughts 导出的通用格式。</p>
+                                        <h3 className="font-bold text-base sm:text-lg text-slate-800">导入 OPML</h3>
+                                        <p className="text-[11px] sm:text-xs text-slate-400">一键快速读取 XMind、iThoughts、MindNode 导出的互通格式。</p>
                                     </div>
-                                    <span className="text-emerald-600 font-semibold text-xs mt-6 inline-flex items-center gap-1 group-hover:translate-x-1 transition-transform">导入 OPML →</span>
+                                    <span className="text-emerald-600 font-semibold text-xs mt-4 inline-flex items-center gap-1 group-hover:translate-x-1 transition-transform">导入 OPML →</span>
                                 </label>
 
-                                <label className="bg-white p-6 rounded-2xl border border-slate-200 hover:border-indigo-500 shadow-sm hover:shadow-md cursor-pointer transition-all flex flex-col justify-between group">
+                                <label className="bg-white p-5 rounded-2xl border border-slate-200 hover:border-indigo-500 shadow-sm hover:shadow-md cursor-pointer transition-all flex flex-col justify-between group">
                                     <input type="file" className="hidden" accept=".json" onChange={handleImportJSONFile} />
-                                    <div className="space-y-3">
+                                    <div className="space-y-2">
                                         <div className="p-3 bg-indigo-50 text-indigo-600 rounded-xl w-fit group-hover:bg-indigo-600 group-hover:text-white transition-colors">
                                             <Icon name="upload" size={24} />
                                         </div>
-                                        <h3 className="font-bold text-lg text-slate-800">导入 JSON 备份</h3>
-                                        <p className="text-xs text-slate-400">加载以往通过本软件导出的 JSON 画布数据。</p>
+                                        <h3 className="font-bold text-base sm:text-lg text-slate-800">导入 JSON</h3>
+                                        <p className="text-[11px] sm:text-xs text-slate-400">载入以往通过本工具备份导出的 JSON 画图文件。</p>
                                     </div>
-                                    <span className="text-indigo-600 font-semibold text-xs mt-6 inline-flex items-center gap-1 group-hover:translate-x-1 transition-transform">选择 JSON 备份 →</span>
+                                    <span className="text-indigo-600 font-semibold text-xs mt-4 inline-flex items-center gap-1 group-hover:translate-x-1 transition-transform">导入 JSON →</span>
                                 </label>
                             </div>
 
-                            {/* 本地文件夹自动保存设置 */}
-                            <div className="bg-slate-100 p-4 rounded-2xl border flex flex-col sm:flex-row items-center justify-between gap-4">
-                                <div className="text-left">
-                                    <p className="text-sm font-semibold text-slate-800">💡 推荐：配置默认自动保存文件夹</p>
-                                    <p className="text-xs text-slate-400">配置后任何改动将自动静默同步至本地文件（JSON/一小时CSV）。</p>
+                            <div className="bg-slate-100 p-4 rounded-2xl border flex flex-col sm:flex-row items-center justify-between gap-4 text-center sm:text-left mx-2">
+                                <div className="space-y-1">
+                                    <p className="text-sm font-semibold text-slate-800">💡 推荐：配置默认自动保存本地目录</p>
+                                    <p className="text-[11px] sm:text-xs text-slate-400">配置后每次改动自动静默保存为 JSON，跨越整点自动归档为 CSV。</p>
                                 </div>
                                 {isLocalSaveSupported ? (
                                     dirHandle ? (
-                                        <button onClick={requestFolderPermission} className="px-4 py-2 bg-slate-800 text-white hover:bg-slate-900 transition-colors text-xs font-bold rounded-xl flex items-center gap-1">
+                                        <button onClick={requestFolderPermission} className="px-4 py-2 bg-slate-800 text-white hover:bg-slate-900 transition-colors text-xs font-bold rounded-xl flex items-center gap-1.5 shrink-0 min-h-[44px]">
                                             <Icon name="folderOpen" size={14} /> 已配置目录 (点击重新验证)
                                         </button>
                                     ) : (
-                                        <button onClick={selectAutosaveDirectory} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white transition-colors text-xs font-bold rounded-xl flex items-center gap-1 shadow-sm">
+                                        <button onClick={selectAutosaveDirectory} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white transition-colors text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-sm shrink-0 min-h-[44px]">
                                             <Icon name="folder" size={14} /> 选择本地空文件夹
                                         </button>
                                     )
                                 ) : (
-                                    <span className="text-xs text-red-500 bg-red-50 border border-red-100 px-3 py-1.5 rounded-lg">您的浏览器目前不支持文件夹直连读写（推荐使用 Chrome 或 Edge）</span>
+                                    <span className="text-[11px] text-red-500 bg-red-50 border border-red-100 px-3 py-2 rounded-lg leading-relaxed">您的浏览器目前不支持文件夹直连读写（推荐使用 Chrome 或 Edge 浏览器）</span>
                                 )}
                             </div>
                         </div>
@@ -858,81 +934,80 @@
                 );
             }
 
-            // --- 渲染工作区间 ---
             return (
                 <div className="flex flex-col h-screen w-screen overflow-hidden">
-                    <header className="h-14 bg-white border-b flex items-center justify-between px-4 z-10 shadow-sm shrink-0">
-                        <div className="flex items-center gap-2">
-                            <div className="bg-slate-800 p-1.5 rounded-lg text-white shadow-sm"><Icon name="settings" size={20} /></div>
-                            <h1 className="font-bold text-lg tracking-tight text-slate-800">{VERSION}</h1>
-                            <div className="h-6 w-px bg-slate-200 mx-2" />
+                    {/* 自适应 Header 工具栏 */}
+                    <header className="h-14 bg-white border-b flex items-center justify-between px-2 md:px-4 z-10 shadow-sm shrink-0">
+                        <div className="flex items-center gap-1 sm:gap-2 overflow-hidden">
+                            <div className="bg-slate-800 p-1.5 rounded-lg text-white shadow-sm shrink-0"><Icon name="settings" size={18} /></div>
+                            <h1 className="font-bold text-sm sm:text-base tracking-tight text-slate-800 shrink-0">{VERSION}</h1>
+                            <div className="h-6 w-px bg-slate-200 mx-1 shrink-0" />
                             
-                            {/* 撤销恢复按钮 */}
-                            <div className="flex items-center gap-1">
-                                <button onClick={undo} disabled={historyIndex <= 0} className={`p-1.5 rounded-lg ${historyIndex > 0 ? 'text-slate-600 hover:bg-slate-100' : 'text-slate-300'}`} title="撤销"><Icon name="undo" size={18} /></button>
-                                <button onClick={redo} disabled={historyIndex >= history.length - 1} className={`p-1.5 rounded-lg ${historyIndex < history.length - 1 ? 'text-slate-600 hover:bg-slate-100' : 'text-slate-300'}`} title="恢复"><Icon name="redo" size={18} /></button>
+                            {/* 撤销恢复 */}
+                            <div className="flex items-center gap-0.5 shrink-0">
+                                <button onClick={undo} disabled={historyIndex <= 0} className={`p-1.5 rounded-lg min-h-[40px] min-w-[40px] flex items-center justify-center ${historyIndex > 0 ? 'text-slate-600 hover:bg-slate-100' : 'text-slate-300'}`} title="撤销"><Icon name="undo" size={18} /></button>
+                                <button onClick={redo} disabled={historyIndex >= history.length - 1} className={`p-1.5 rounded-lg min-h-[40px] min-w-[40px] flex items-center justify-center ${historyIndex < history.length - 1 ? 'text-slate-600 hover:bg-slate-100' : 'text-slate-300'}`} title="恢复"><Icon name="redo" size={18} /></button>
                             </div>
 
-                            {/* 手动导入文件 */}
-                            <div className="h-6 w-px bg-slate-200 mx-2" />
-                            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg">
-                                <label className="flex items-center gap-2 px-3 py-1 hover:bg-white rounded-md text-xs font-semibold text-slate-700 cursor-pointer transition-all">
-                                    <Icon name="importOpml" size={14} /> 导入 OPML <input type="file" className="hidden" accept=".opml" onChange={handleImportOPMLFile} />
-                                </label>
-                                <label className="flex items-center gap-2 px-3 py-1 hover:bg-white rounded-md text-xs font-semibold text-slate-700 cursor-pointer transition-all">
-                                    <Icon name="upload" size={14} /> 导入 JSON <input type="file" className="hidden" accept=".json" onChange={handleImportJSONFile} />
-                                </label>
-                            </div>
-                            
-                            <div className="h-6 w-px bg-slate-200 mx-2" />
-                            {/* 本地文件夹保存提示状态 */}
-                            {isLocalSaveSupported && dirHandle ? (
-                                folderPermission === 'granted' ? (
-                                    <div onClick={selectAutosaveDirectory} className="cursor-pointer flex items-center gap-1.5 px-3 py-1 bg-green-50 text-green-700 border border-green-200 rounded-lg text-xs font-medium" title="点击更换保存目录">
-                                        <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-ping" />
-                                        <span>自动同步已开启</span>
-                                    </div>
+                            {/* 本地静默自动同步指示灯 */}
+                            <div className="hidden lg:flex items-center shrink-0">
+                                <div className="h-6 w-px bg-slate-200 mx-1" />
+                                {isLocalSaveSupported && dirHandle ? (
+                                    folderPermission === 'granted' ? (
+                                        <div onClick={selectAutosaveDirectory} className="cursor-pointer flex items-center gap-1.5 px-3 py-1 bg-green-50 text-green-700 border border-green-200 rounded-lg text-xs font-medium" title="点击更换保存目录">
+                                            <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-ping" />
+                                            <span>同步已开启</span>
+                                        </div>
+                                    ) : (
+                                        <div onClick={requestFolderPermission} className="cursor-pointer flex items-center gap-1.5 px-3 py-1 bg-orange-50 text-orange-700 border border-orange-200 rounded-lg text-xs font-medium animate-pulse" title="点击获取文件夹权限授权以继续同步">
+                                            <span>⚠️ 同步待授权</span>
+                                        </div>
+                                    )
                                 ) : (
-                                    <div onClick={requestFolderPermission} className="cursor-pointer flex items-center gap-1.5 px-3 py-1 bg-orange-50 text-orange-700 border border-orange-200 rounded-lg text-xs font-medium animate-pulse" title="点击获取文件夹权限授权以继续同步">
-                                        <span>⚠️ 自动保存需要重新授权</span>
+                                    <div onClick={selectAutosaveDirectory} className={`cursor-pointer flex items-center gap-1.5 px-3 py-1 bg-slate-100 text-slate-500 hover:bg-slate-200 rounded-lg text-xs font-medium ${!isLocalSaveSupported ? 'pointer-events-none opacity-50' : ''}`} title="建立本地同步文件夹">
+                                        <span>未开启同步</span>
                                     </div>
-                                )
-                            ) : (
-                                <div onClick={selectAutosaveDirectory} className={`cursor-pointer flex items-center gap-1.5 px-3 py-1 bg-slate-100 text-slate-500 hover:bg-slate-200 rounded-lg text-xs font-medium ${!isLocalSaveSupported ? 'pointer-events-none opacity-50' : ''}`} title="建立本地同步文件夹">
-                                    <span>未开启文件夹同步</span>
-                                </div>
-                            )}
-
+                                )}
+                            </div>
                         </div>
                         
-                        <div className="flex items-center gap-2">
-                            <button onClick={() => { 
-                                const recursiveCollapse = (n) => ({ ...n, collapsed: (n.children || []).length > 0, children: (n.children || []).map(recursiveCollapse) });
-                                setData(recursiveCollapse(data));
-                            }} className="p-2 hover:bg-slate-100 rounded-lg text-slate-600" title="一键收起"><Icon name="fold" size={18} /></button>
-                            <button onClick={() => setTranslate({ x: 150, y: window.innerHeight / 2 })} className="p-2 hover:bg-slate-100 rounded-lg text-slate-600" title="重置视角"><Icon name="maximize" size={18} /></button>
-                            <div className="h-6 w-px bg-slate-200 mx-1" />
+                        {/* 右侧导出与选项 (移动端自动折叠或仅显示图标) */}
+                        <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+                            <button onClick={collapseAll} className="p-2 hover:bg-slate-100 rounded-lg text-slate-600 min-h-[40px]" title="一键收起"><Icon name="fold" size={18} /></button>
+                            <button onClick={handleFitView} className="p-2 hover:bg-slate-100 rounded-lg text-slate-600 min-h-[40px]" title="重置视角"><Icon name="maximize" size={18} /></button>
+                            <div className="h-6 w-px bg-slate-200 mx-0.5 sm:mx-1" />
                             
-                            {/* 传统导出按钮（保持带日期规则） */}
-                            <button onClick={handleDownloadImage} className="flex items-center gap-2 px-3 py-1.5 hover:bg-slate-100 rounded-lg text-sm font-medium text-slate-700 transition-colors"><Icon name="image" size={16} /> 图片</button>
-                            <button onClick={handleExportOPML} className="flex items-center gap-2 px-3 py-1.5 hover:bg-slate-100 rounded-lg text-sm font-medium text-slate-700 transition-colors"><Icon name="share" size={16} /> OPML</button>
-                            <button onClick={handleExportMarkdown} className="flex items-center gap-2 px-3 py-1.5 hover:bg-slate-100 rounded-lg text-sm font-medium text-slate-700 transition-colors"><Icon name="fileText" size={16} /> MD</button>
-                            <button onClick={handleExportJSON} className="flex items-center gap-2 px-3 py-1.5 hover:bg-slate-100 rounded-lg text-sm font-medium text-slate-700 transition-colors"><Icon name="download" size={16} /> JSON</button>
+                            <button onClick={handleDownloadImage} className="flex items-center gap-1 px-1.5 sm:px-2.5 py-1.5 hover:bg-slate-100 rounded-lg text-xs sm:text-sm font-medium text-slate-700 transition-colors min-h-[40px]">
+                                <Icon name="image" size={16} />
+                                <span className="hidden md:inline">图片</span>
+                            </button>
+                            <button onClick={handleExportOPML} className="flex items-center gap-1 px-1.5 sm:px-2.5 py-1.5 hover:bg-slate-100 rounded-lg text-xs sm:text-sm font-medium text-slate-700 transition-colors min-h-[40px]">
+                                <Icon name="share" size={16} />
+                                <span className="hidden md:inline">OPML</span>
+                            </button>
+                            <button onClick={handleExportMarkdown} className="flex items-center gap-1 px-1.5 sm:px-2.5 py-1.5 hover:bg-slate-100 rounded-lg text-xs sm:text-sm font-medium text-slate-700 transition-colors min-h-[40px]">
+                                <Icon name="fileText" size={16} />
+                                <span className="hidden md:inline">MD</span>
+                            </button>
+                            <button onClick={handleExportJSON} className="flex items-center gap-1 px-1.5 sm:px-2.5 py-1.5 hover:bg-slate-100 rounded-lg text-xs sm:text-sm font-medium text-slate-700 transition-colors min-h-[40px]">
+                                <Icon name="download" size={16} />
+                                <span className="hidden md:inline">JSON</span>
+                            </button>
                             
-                            <div className="h-6 w-px bg-slate-200 mx-1" />
+                            <div className="h-6 w-px bg-slate-200 mx-0.5 sm:mx-1" />
                             <button onClick={() => {
                                 if(confirm('确定要关闭当前脑图并返回主页吗？未保存的数据如果未开启文件夹同步将会丢失。')) {
                                     setDataState(null);
                                     setHistory([]);
                                 }
-                            }} className="p-2 hover:bg-red-50 text-red-500 hover:text-red-700 rounded-lg transition-all" title="关闭当前导图并返回空白主页"><Icon name="close" size={18} /></button>
+                            }} className="p-2 hover:bg-red-50 text-red-500 hover:text-red-700 rounded-lg transition-all min-h-[40px]" title="返回主页"><Icon name="close" size={18} /></button>
                         </div>
                     </header>
 
+                    {/* 画布核心绘图主区 */}
                     <main className="flex-1 relative overflow-hidden bg-[radial-gradient(#e2e8f0_1px,transparent_1px)] bg-[length:24px_24px]" 
                         onMouseDown={(e) => { 
                             if (e.target.tagName === 'svg') { 
-                                // 双重安全保障：点击空白画布重置一切悬浮/拖拽状态
                                 setDragInfo({ isDragging: false, draggingId: null, dx: 0, dy: 0, targetId: null });
                                 setSelectedId('root');
                                 
@@ -941,48 +1016,63 @@
                                 const mu = () => { window.removeEventListener('mousemove', mm); window.removeEventListener('mouseup', mu); }; 
                                 window.addEventListener('mousemove', mm); window.addEventListener('mouseup', mu); 
                             } 
-                        }} 
-                        onWheel={(e) => setScale(s => Math.min(Math.max(s - e.deltaY * 0.001, 0.2), 3))}
+                        }}
+                        onTouchStart={handleTouchStart}
+                        onWheel={(e) => setScale(s => Math.min(Math.max(s - e.deltaY * 0.001, 0.15), 3.0))}
                     >
                         
+                        {/* 粘贴板及移动端复制挂载层 */}
                         {clipboard && (
-                            <div className="absolute top-4 left-4 z-20 flex items-center gap-2 bg-blue-50 border border-blue-200 px-3 py-2 rounded-lg shadow-sm text-xs text-blue-600 animate-bounce">
-                                <Icon name="copy" size={14} /> 剪贴板中有待粘贴节点: "{clipboard.text.substring(0,10)}..."
+                            <div className="absolute top-4 left-4 z-20 flex items-center gap-2 bg-blue-50 border border-blue-200 px-3 py-2 rounded-xl shadow-sm text-xs text-blue-600 animate-bounce max-w-[calc(100%-2rem)]">
+                                <Icon name="copy" size={14} /> 
+                                <span className="truncate">已复制节点: "{clipboard.text}"</span>
                             </div>
                         )}
 
-                        <svg ref={svgRef} width="100%" height="100%"><g transform={`translate(${translate.x}, ${translate.y}) scale(${scale})`}>{renderTree(layout)}</g></svg>
+                        <svg ref={svgRef} width="100%" height="100%">
+                            <g transform={`translate(${translate.x}, ${translate.y}) scale(${scale})`}>
+                                {renderTree(layout)}
+                            </g>
+                        </svg>
                         
-                        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-white/90 backdrop-blur shadow-2xl border border-slate-200 px-4 py-3 rounded-3xl z-20">
-                            <button onClick={() => addChild(selectedId)} className="flex items-center gap-1.5 px-5 py-2 bg-blue-600 text-white rounded-2xl text-xs font-bold shadow-lg hover:shadow-blue-200 transition-all active:scale-95"><Icon name="plus" size={14} /> 子话题</button>
-                            <button onClick={() => { if (selectedId === 'root') return; const pId = findParentId(data, selectedId); addChild(pId); }} className="flex items-center gap-1.5 px-5 py-2 bg-slate-700 text-white rounded-2xl text-xs font-bold shadow-lg hover:shadow-slate-200 transition-all active:scale-95"><Icon name="plus" size={14} /> 同级</button>
+                        {/* 手机/平板端专属悬浮触控板 (支持微调及重置) */}
+                        <div className="absolute right-4 bottom-24 flex flex-col gap-2 z-20 md:hidden">
+                            <button onClick={() => setScale(s => Math.min(s + 0.1, 3.0))} className="p-3.5 bg-white/90 backdrop-blur rounded-full shadow-lg border border-slate-200 text-slate-700 active:bg-slate-100 flex items-center justify-center min-h-[46px] min-w-[44px]" title="放大"><Icon name="plus" size={18} /></button>
+                            <button onClick={() => setScale(s => Math.max(s - 0.1, 0.15))} className="p-3.5 bg-white/90 backdrop-blur rounded-full shadow-lg border border-slate-200 text-slate-700 active:bg-slate-100 flex items-center justify-center min-h-[46px] min-w-[44px]" title="缩小"><Icon name="minus" size={18} /></button>
+                            <button onClick={handleFitView} className="p-3.5 bg-white/90 backdrop-blur rounded-full shadow-lg border border-slate-200 text-slate-700 active:bg-slate-100 flex items-center justify-center min-h-[46px] min-w-[44px]" title="居中"><Icon name="maximize" size={18} /></button>
+                        </div>
+
+                        {/* 自适应底部控制栏 */}
+                        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex flex-wrap justify-center gap-1.5 sm:gap-2 bg-white/90 backdrop-blur shadow-2xl border border-slate-200 p-2 rounded-2xl sm:rounded-3xl z-20 w-[92%] sm:w-auto max-w-full">
+                            <button onClick={() => addChild(selectedId)} className="flex items-center gap-1 sm:gap-1.5 px-3 sm:px-4 py-2 bg-blue-600 text-white rounded-xl sm:rounded-2xl text-[11px] sm:text-xs font-bold shadow-lg hover:shadow-blue-200 transition-all active:scale-95 min-h-[40px]"><Icon name="plus" size={12} /> 子话题</button>
+                            <button onClick={() => { if (selectedId === 'root') return; const pId = findParentId(data, selectedId); addChild(pId); }} className="flex items-center gap-1 sm:gap-1.5 px-3 sm:px-4 py-2 bg-slate-700 text-white rounded-xl sm:rounded-2xl text-[11px] sm:text-xs font-bold shadow-lg hover:shadow-slate-200 transition-all active:scale-95 min-h-[40px]"><Icon name="plus" size={12} /> 同级</button>
                             
-                            <div className="w-px h-6 bg-slate-200 mx-1" />
+                            <div className="w-px h-6 bg-slate-200 self-center hidden sm:block" />
                             
-                            <button onClick={() => moveSibling(selectedId, -1)} className="p-2 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl shadow-sm transition-all" title="上移"><Icon name="up" size={14} /></button>
-                            <button onClick={() => moveSibling(selectedId, 1)} className="p-2 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl shadow-sm transition-all" title="下移"><Icon name="down" size={14} /></button>
+                            <button onClick={() => moveSibling(selectedId, -1)} className="p-2.5 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl shadow-sm transition-all min-h-[40px]" title="上移"><Icon name="up" size={12} /></button>
+                            <button onClick={() => moveSibling(selectedId, 1)} className="p-2.5 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl shadow-sm transition-all min-h-[40px]" title="下移"><Icon name="down" size={12} /></button>
                             
                             {selectedId !== 'root' && findParentId(data, selectedId) === 'root' && (
-                                <button onClick={() => changeBranchColor(selectedId)} className="flex items-center gap-1.5 px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-2xl text-xs font-bold hover:bg-slate-50 transition-all active:scale-95 shadow-sm"><Icon name="palette" size={14} /> 换色</button>
+                                <button onClick={() => changeBranchColor(selectedId)} className="flex items-center gap-1.5 px-3 py-2 bg-white border border-slate-200 text-slate-700 rounded-xl sm:rounded-2xl text-[11px] sm:text-xs font-bold hover:bg-slate-50 transition-all active:scale-95 shadow-sm min-h-[40px]"><Icon name="palette" size={12} /> 换色</button>
                             )}
 
                             <div className="flex gap-1">
-                                <button onClick={handleCopy} className={`flex items-center gap-1.5 px-4 py-2 bg-indigo-50 text-indigo-700 border border-indigo-100 rounded-2xl text-xs font-bold hover:bg-indigo-100 transition-all active:scale-95 shadow-sm ${selectedId === 'root' ? 'opacity-50 cursor-not-allowed' : ''}`} title="复制节点 (Ctrl+C)">
-                                    <Icon name="copy" size={14} /> 复制
+                                <button onClick={handleCopy} className={`flex items-center gap-1 px-3 py-2 bg-indigo-50 text-indigo-700 border border-indigo-100 rounded-xl sm:rounded-2xl text-[11px] sm:text-xs font-bold hover:bg-indigo-100 transition-all active:scale-95 shadow-sm min-h-[40px] ${selectedId === 'root' ? 'opacity-50 cursor-not-allowed' : ''}`} title="复制节点">
+                                    <Icon name="copy" size={12} /> 复制
                                 </button>
                                 {clipboard && (
-                                    <button onClick={handlePaste} className="flex items-center gap-1.5 px-4 py-2 bg-emerald-500 text-white rounded-2xl text-xs font-bold hover:bg-emerald-600 transition-all active:scale-95 shadow-lg animate-pulse" title="粘贴到所选节点后 (Ctrl+V)">
-                                        <Icon name="paste" size={14} /> 粘贴
+                                    <button onClick={handlePaste} className="flex items-center gap-1 px-3 py-2 bg-emerald-500 text-white rounded-xl sm:rounded-2xl text-[11px] sm:text-xs font-bold hover:bg-emerald-600 transition-all active:scale-95 shadow-lg animate-pulse min-h-[40px]" title="粘贴">
+                                        <Icon name="paste" size={12} /> 粘贴
                                     </button>
                                 )}
                             </div>
                             
-                            <div className="w-px h-6 bg-slate-200 mx-1" />
-                            <button onClick={() => { if (selectedId === 'root') return; const upd = (n) => ({ ...n, children: (n.children || []).filter(c => c.id !== selectedId).map(upd) }); setData(upd(data)); setSelectedId('root'); }} className="p-2.5 hover:bg-red-50 text-slate-400 hover:text-red-500 rounded-2xl transition-colors"><Icon name="trash" size={18} /></button>
+                            <div className="w-px h-6 bg-slate-200 self-center hidden sm:block" />
+                            <button onClick={() => { if (selectedId === 'root') return; const upd = (n) => ({ ...n, children: (n.children || []).filter(c => c.id !== selectedId).map(upd) }); setData(upd(data)); setSelectedId('root'); }} className="p-2.5 hover:bg-red-50 text-slate-400 hover:text-red-500 rounded-xl sm:rounded-2xl transition-colors min-h-[40px]"><Icon name="trash" size={14} /></button>
                         </div>
 
-                        {/* 状态日志面板 */}
-                        <div className="absolute top-16 right-6 pointer-events-none space-y-1">
+                        {/* 状态监控面板 */}
+                        <div className="absolute top-16 right-4 pointer-events-none space-y-1 hidden sm:block">
                            <div className="bg-white/70 backdrop-blur-sm px-3 py-1.5 rounded-full border text-[10px] text-slate-500 shadow-sm flex items-center gap-2">
                               <div className={`w-2 h-2 rounded-full ${saveStatus === '修改已保存' ? 'bg-green-500' : 'bg-orange-500'}`} />
                               <span>内存状态: {saveStatus}</span>
@@ -991,17 +1081,17 @@
                                <div className="bg-white/70 backdrop-blur-sm px-3 py-1.5 rounded-full border text-[10px] text-slate-500 shadow-sm flex items-center gap-2">
                                   <div className={`w-2 h-2 rounded-full ${folderPermission === 'granted' ? 'bg-blue-500' : 'bg-red-500'}`} />
                                   <span>本地同步: {folderSaveStatus}</span>
-                                </div>
+                               </div>
                            )}
                         </div>
 
-                        <div className="absolute top-16 left-6 pointer-events-none space-y-1 bg-white/40 p-2 rounded text-[10px] text-slate-500 shadow-sm">
-                           <p>• 撤销/恢复：顶部栏箭头或 Ctrl+Z / Ctrl+Y</p>
+                        {/* 移动/手势说明面板 */}
+                        <div className="absolute top-16 left-4 pointer-events-none space-y-1 bg-white/40 p-2 rounded text-[10px] text-slate-500 shadow-sm max-w-[200px] hidden sm:block">
+                           <p>• 撤销/恢复：Ctrl+Z / Ctrl+Y</p>
+                           <p>• 手机捏合缩放 & 双指拖动</p>
                            <p>• 取消拖拽/悬浮：按 <b>Esc</b> 键或点击空白画布</p>
-                           <p>• 精准粘贴：复制后选中新父节点点击“粘贴”</p>
-                           <p>• 拖拽 B 到 A：鼠标指针悬停即可变为其子话题</p>
-                           <p>• 自动保存：每分钟自动覆盖 ithought_autosave.json</p>
-                           <p>• 每小时自动覆盖备份一份 ithought_autosave.csv 文件</p>
+                           <p>• 自动同步：每分钟覆盖 ithought_autosave.json</p>
+                           <p>• 每小时静默归档：ithought_autosave.csv 文件</p>
                         </div>
                     </main>
                 </div>
@@ -1009,7 +1099,7 @@
         }
 
         const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />); // 修正 React 挂载方式，恢复为 <App />
+        root.render(<App />);
     </script>
 </body>
 </html>
