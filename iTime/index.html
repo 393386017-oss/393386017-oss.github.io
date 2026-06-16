@@ -5,10 +5,10 @@
       =========================================
       开发更新日志 (Version Log)
       =========================================
-      [v5.2] iTime大宙司 5.2
-      - 升级：日视图时段矩阵双行展示，显示时间与最多10个字符的规划摘要。
-      - 调整：统一底部操作按钮命名（导出PNG、导出JS、导入JS）。
-      - 升级：全系统应用文件导出统一命名规范（iTM+版本号+YYMMDD+01.后缀）。
+      [v6.0] iTime大宙司 6.0
+      - 升级：将五色标签中的橙色改为黄色，前缀更新为 Ug-。
+      - 革命：引入零云端静默同步系统 (File System Access API)，1秒防抖持久化，每小时自动归档 CSV。
+      - 升级：增加移动端多点触控双指捏合缩放 (Pinch-to-Zoom)，并配备悬浮微调控制台。
 
       [v5.3] iTime大宙司 5.3
       - 升级：增加「格式刷」复制功能。在日视图热力图中开启后，可快速将某一时段的（颜色+文本）批量粘贴到其他时段，极大提升规划效率。
@@ -49,7 +49,7 @@
     -->
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>iTime大宙司5.3</title>
+    <title>iTime大宙司6.0</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
@@ -67,6 +67,28 @@
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
 
+        // --- 6.0 新增：IndexedDB 存储句柄逻辑 ---
+        const DB_NAME = 'iTimeSyncDB';
+        const STORE_NAME = 'dirHandles';
+        const initDB = () => new Promise((resolve, reject) => {
+            const req = indexedDB.open(DB_NAME, 1);
+            req.onupgradeneeded = (e) => e.target.result.createObjectStore(STORE_NAME);
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = () => reject(req.error);
+        });
+        const saveHandleToDB = async (handle) => {
+            const db = await initDB();
+            const tx = db.transaction(STORE_NAME, 'readwrite');
+            tx.objectStore(STORE_NAME).put(handle, 'syncFolder');
+            return new Promise(r => tx.oncomplete = r);
+        };
+        const getHandleFromDB = async () => {
+            const db = await initDB();
+            const tx = db.transaction(STORE_NAME, 'readonly');
+            const req = tx.objectStore(STORE_NAME).get('syncFolder');
+            return new Promise(r => { req.onsuccess = () => r(req.result); req.onerror = () => r(null); });
+        };
+
         const CalendarIcon = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/></svg>);
         const ChevronLeft = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="m15 18-6-6 6-6"/></svg>);
         const ChevronRight = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="m9 18 6-6-6-6"/></svg>);
@@ -82,6 +104,11 @@
         const TableIcon = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M3 3v18h18V3H3z"/><path d="M3 9h18"/><path d="M3 15h18"/><path d="M9 3v18"/><path d="M15 3v18"/></svg>);
         const ClockIcon = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>);
         const PaintbrushIcon = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="m9.06 11.9 8.07-8.06a2.85 2.85 0 1 1 4.03 4.03l-8.06 8.08"/><path d="M7.07 14.94c-1.66 0-3 1.35-3 3.02 0 1.33-2.5 1.52-2 2.02 1.08 1.1 2.49 2.02 4 2.02 2.2 0 4-1.8 4-4.04a3.01 3.01 0 0 0-3-3.02z"/></svg>);
+        // --- 6.0 新增图标 ---
+        const FolderSync = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/><path d="M12 10v6"/><path d="m9 13 3 3 3-3"/></svg>);
+        const ZoomIn = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>);
+        const ZoomOut = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>);
+        const Maximize = ({ className }) => (<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>);
 
         const App = () => {
           const [currentView, setCurrentView] = useState('month'); 
@@ -117,6 +144,15 @@
           const [isFormatPainterActive, setIsFormatPainterActive] = useState(false);
           const [painterSourceSlot, setPainterSourceSlot] = useState(null); // 记录被复制的时段ID
           
+          // --- 6.0 新增状态：静默同步文件系统 ---
+          const [dirHandle, setDirHandle] = useState(null);
+          const [syncStatus, setSyncStatus] = useState('未连接'); 
+          
+          // --- 6.0 新增状态：触控缩放系统 ---
+          const [scale, setScale] = useState(1);
+          const [pan, setPan] = useState({ x: 0, y: 0 });
+          const pinchRef = useRef({ initialDistance: null, initialScale: 1, startTouch: null });
+
           const fileInputRef = useRef(null);
           const captureRef = useRef(null); 
 
@@ -131,11 +167,11 @@
             { id: 'slot', label: '时段' }
           ];
 
-          // 5.0：定义5种颜色及其对应的前缀和样式
+          // 5.0：定义5种颜色及其对应的前缀和样式 (6.0更新：橙色改为黄色 Ug-)
           const colorOptions = [
             { id: 'gray', label: '灰色', bg: 'bg-slate-400', ring: 'ring-slate-400', prefix: 'Sl-' },
             { id: 'blue', label: '蓝色', bg: 'bg-blue-400', ring: 'ring-blue-400', prefix: 'Rt-' },
-            { id: 'orange', label: '橙色', bg: 'bg-orange-400', ring: 'ring-orange-400', prefix: 'Rd-' },
+            { id: 'yellow', label: '黄色', bg: 'bg-yellow-400', ring: 'ring-yellow-400', prefix: 'Ug-' },
             { id: 'purple', label: '紫色', bg: 'bg-purple-400', ring: 'ring-purple-400', prefix: 'Pj-' },
             { id: 'green', label: '草绿', bg: 'bg-emerald-400', ring: 'ring-emerald-400', prefix: 'Rl-' },
           ];
@@ -247,6 +283,158 @@
           useEffect(() => {
             localStorage.setItem('calendar_slot_colors', JSON.stringify(slotColors));
           }, [slotColors]);
+
+          // ================= [6.0] 本地静默同步系统 =================
+          // 初始化加载文件夹授权
+          useEffect(() => {
+              const loadSyncHandle = async () => {
+                  try {
+                      const handle = await getHandleFromDB();
+                      if (handle) {
+                          const permission = await handle.queryPermission({ mode: 'readwrite' });
+                          if (permission === 'granted') {
+                              setDirHandle(handle);
+                              setSyncStatus('已连接');
+                          } else {
+                              setSyncStatus('待授权');
+                          }
+                      }
+                  } catch (e) { console.warn("Failed to load DB handle", e); }
+              };
+              loadSyncHandle();
+          }, []);
+
+          // 连接文件夹并提权
+          const handleConnectFolder = async () => {
+              try {
+                  if (!window.showDirectoryPicker) {
+                      showToast('您的浏览器不支持 File System Access API (建议使用桌面端 Chrome/Edge)。');
+                      return;
+                  }
+                  if (dirHandle && syncStatus === '待授权') {
+                      const permission = await dirHandle.requestPermission({ mode: 'readwrite' });
+                      if (permission === 'granted') {
+                          setSyncStatus('已连接');
+                          showToast('同步授权已恢复！');
+                      }
+                      return;
+                  }
+                  const handle = await window.showDirectoryPicker({ mode: 'readwrite' });
+                  await saveHandleToDB(handle);
+                  setDirHandle(handle);
+                  setSyncStatus('已连接');
+                  showToast('已绑定本地同步目录！');
+              } catch (e) {
+                  if (e.name !== 'AbortError') showToast('连接文件夹失败');
+              }
+          };
+
+          // 核心：写入 JSON
+          const writeJsonToDisk = async () => {
+              if (!dirHandle || syncStatus !== '已连接') return;
+              try {
+                  setSyncStatus('同步中...');
+                  const fileHandle = await dirHandle.getFileHandle('itime_autosave.json', { create: true });
+                  const writable = await fileHandle.createWritable();
+                  await writable.write(JSON.stringify({ notes, periodNames, slotColors }, null, 2));
+                  await writable.close();
+                  setSyncStatus('已同步');
+              } catch (e) {
+                  setSyncStatus('同步失败');
+                  console.error(e);
+              }
+          };
+
+          // 核心：写入归档 CSV
+          const archiveCsvToDisk = async () => {
+              if (!dirHandle || syncStatus !== '已连接') return;
+              try {
+                  const tree = extractDataTree();
+                  const escapeCSV = (str) => `"${String(str || '').replace(/"/g, '""')}"`;
+                  const flattenWideTable = (node, path = {}, result = []) => {
+                      path[node.levelName] = { title: node.title, name: node.name || '', note: node.note || '' };
+                      if (node.children.length === 0) {
+                          const hasContent = Object.values(path).some(p => p.name !== '' || p.note !== '');
+                          if(hasContent) result.push({ ...path });
+                      } else node.children.forEach(c => flattenWideTable(c, { ...path }, result));
+                      return result;
+                  };
+                  const rawRows = flattenWideTable(tree);
+                  let csvContent = '\uFEFF' + ['年度','季度','月度','周度','当日','时段'].map(h => `${h}节点,${h}命名,${h}规划`).join(',') + '\n';
+                  rawRows.forEach(row => {
+                      csvContent += ['年度','季度','月度','周度','当日','时段'].map(h => {
+                          const data = row[h] || { title:'', name:'', note:'' };
+                          return `${escapeCSV(data.title)},${escapeCSV(data.name)},${escapeCSV(data.note)}`;
+                      }).join(',') + '\n';
+                  });
+
+                  const fileName = `iTM6.0_Archive_${formatDateKey(new Date())}_${String(new Date().getHours()).padStart(2, '0')}H.csv`;
+                  const fileHandle = await dirHandle.getFileHandle(fileName, { create: true });
+                  const writable = await fileHandle.createWritable();
+                  await writable.write(csvContent);
+                  await writable.close();
+                  showToast(`整点归档完成：${fileName}`);
+              } catch (e) { console.error('CSV Archive failed', e); }
+          };
+
+          // 防抖延迟静默保存 (1.0s)
+          useEffect(() => {
+              if (syncStatus === '未连接' || syncStatus === '待授权') return;
+              setSyncStatus('待同步');
+              const timer = setTimeout(() => writeJsonToDisk(), 1000);
+              return () => clearTimeout(timer);
+          }, [notes, periodNames, slotColors]);
+
+          // 每小时整点归档探针
+          useEffect(() => {
+              let lastHour = new Date().getHours();
+              const timer = setInterval(() => {
+                  const currentHour = new Date().getHours();
+                  if (currentHour !== lastHour) {
+                      archiveCsvToDisk();
+                      lastHour = currentHour;
+                  }
+              }, 60000); // 每分钟轮询
+              return () => clearInterval(timer);
+          }, [notes, periodNames, slotColors, dirHandle, syncStatus]);
+
+          // ================= [6.0] 触控缩放引擎 =================
+          const handleTouchStart = (e) => {
+              if (e.touches.length === 2) {
+                  const dx = e.touches[0].clientX - e.touches[1].clientX;
+                  const dy = e.touches[0].clientY - e.touches[1].clientY;
+                  pinchRef.current.initialDistance = Math.sqrt(dx * dx + dy * dy);
+                  pinchRef.current.initialScale = scale;
+              } else if (e.touches.length === 1) {
+                  pinchRef.current.startTouch = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+              }
+          };
+
+          const handleTouchMove = (e) => {
+              if (e.touches.length === 2 && pinchRef.current.initialDistance) {
+                  e.preventDefault(); 
+                  const dx = e.touches[0].clientX - e.touches[1].clientX;
+                  const dy = e.touches[0].clientY - e.touches[1].clientY;
+                  const currentDistance = Math.sqrt(dx * dx + dy * dy);
+                  const newScale = pinchRef.current.initialScale * (currentDistance / pinchRef.current.initialDistance);
+                  setScale(Math.min(Math.max(newScale, 0.5), 3));
+              }
+          };
+
+          const handleTouchEnd = (e) => {
+              if (e.changedTouches.length === 1 && pinchRef.current.startTouch) {
+                  const endX = e.changedTouches[0].clientX;
+                  const endY = e.changedTouches[0].clientY;
+                  const dist = Math.sqrt(Math.pow(endX - pinchRef.current.startTouch.x, 2) + Math.pow(endY - pinchRef.current.startTouch.y, 2));
+                  // 若 dist < 4px，视为点击，放行 onClick；否则视为拖动，不予干预
+              }
+              pinchRef.current.initialDistance = null;
+              pinchRef.current.startTouch = null;
+          };
+
+          const zoomReset = () => { setScale(1); setPan({ x: 0, y: 0 }); };
+          const zoomIn = () => setScale(prev => Math.min(prev + 0.2, 3));
+          const zoomOut = () => setScale(prev => Math.max(prev - 0.2, 0.5));
 
           const handlePrevPeriod = () => {
             if (currentView === 'slot') {
@@ -934,9 +1122,20 @@
                     <h1 className="text-2xl md:text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600 tracking-tight flex items-center drop-shadow-sm">
                       iTime大宙司 
                       <span className="text-[10px] md:text-xs font-bold text-white bg-gradient-to-r from-blue-500 to-indigo-500 px-2 py-0.5 rounded-full ml-2 shadow-md">
-                        v5.3
+                        v6.0
                       </span>
                     </h1>
+                    
+                    {/* 6.0 静默同步挂载点 */}
+                    <div className="ml-4 flex items-center">
+                       <button onClick={handleConnectFolder} title="File System API 本地免云同步"
+                               className={`flex items-center gap-1.5 px-3 py-1 text-[10px] md:text-xs font-bold rounded-full border transition-all ${syncStatus === '已连接' || syncStatus === '已同步' || syncStatus === '待同步' ? 'bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100 shadow-sm' : 'bg-amber-50 text-amber-600 border-amber-200 hover:bg-amber-100 shadow-sm animate-pulse'}`}>
+                          <FolderSync className="w-3 h-3 md:w-3.5 md:h-3.5"/>
+                          <span className="hidden sm:inline">{syncStatus === '未连接' ? '绑定本地文件夹' : syncStatus === '待授权' ? '恢复授权' : syncStatus}</span>
+                          <span className="sm:hidden">{syncStatus}</span>
+                       </button>
+                    </div>
+
                     {currentView !== 'day' && currentView !== 'slot' && (
                         <div className="flex bg-slate-200/60 rounded-lg p-1 ml-4 border border-slate-200">
                             <button onClick={()=>setDisplayMode('calendar')} className={`flex items-center gap-1 px-3 py-1 text-xs md:text-sm font-bold rounded-md transition-all ${displayMode === 'calendar' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:bg-slate-200'}`}>
@@ -998,7 +1197,25 @@
                       </div>
                     </div>
                   </div>
-                  <div className="flex-grow overflow-hidden">{renderCurrentView()}</div>
+                  
+                  {/* 6.0 触控缩放引擎挂载 */}
+                  <div className="flex-grow overflow-hidden relative"
+                       onTouchStart={handleTouchStart} 
+                       onTouchMove={handleTouchMove} 
+                       onTouchEnd={handleTouchEnd}>
+                       
+                      <div className="w-full h-full transform origin-center transition-transform duration-75 ease-out"
+                           style={{ transform: `scale(${scale}) translate(${pan.x}px, ${pan.y}px)` }}>
+                          {renderCurrentView()}
+                      </div>
+
+                      {/* 6.0 悬浮微调面板 */}
+                      <div className="absolute bottom-4 right-4 flex flex-col gap-1.5 bg-white/90 backdrop-blur shadow-lg border border-slate-100 p-1.5 rounded-2xl z-50">
+                          <button onClick={zoomIn} className="p-2 bg-slate-50 hover:bg-blue-50 rounded-xl text-slate-600 hover:text-blue-600 transition-colors" title="放大"><ZoomIn className="w-4 h-4 md:w-5 md:h-5"/></button>
+                          <button onClick={zoomReset} className="p-2 bg-slate-50 hover:bg-blue-50 rounded-xl text-slate-600 hover:text-blue-600 transition-colors" title="恢复居中"><Maximize className="w-4 h-4 md:w-5 md:h-5"/></button>
+                          <button onClick={zoomOut} className="p-2 bg-slate-50 hover:bg-blue-50 rounded-xl text-slate-600 hover:text-blue-600 transition-colors" title="缩小"><ZoomOut className="w-4 h-4 md:w-5 md:h-5"/></button>
+                      </div>
+                  </div>
                 </div>
 
                 {/* 右侧：绑定输入与高级操作 */}
